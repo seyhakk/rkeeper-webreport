@@ -5,3 +5,5 @@ agent/node_modules/
 agent/Agent.exe
 
 .vercel
+supabase/.temp/
+*.bak
