@@ -3,3 +3,5 @@ node_modules/
 agent/config.json
 agent/node_modules/
 agent/Agent.exe
+
+.vercel
