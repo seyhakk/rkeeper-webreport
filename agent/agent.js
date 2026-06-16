@@ -1,4 +1,3 @@
-const { createClient } = require('@supabase/supabase-js');
 const sql = require('mssql');
 const path = require('path');
 const fs = require('fs');
@@ -11,9 +10,9 @@ if (!fs.existsSync(configPath)) {
 }
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
-const apiKey = config.apiKey;
-const POLL_INTERVAL = (config.pollInterval || 3) * 1000;
+const API_URL = config.apiUrl || 'https://rkeeper-reports.vercel.app';
+const API_KEY = config.apiKey;
+const POLL_MS = (config.pollInterval || 3) * 1000;
 
 const sqlConfig = {
   server: config.sql.server,
@@ -39,6 +38,15 @@ const QUERIES = {
   'guest-count': `SELECT CAST(SHIFTDATE AS DATE) AS SaleDate, COUNT(*) AS TotalChecks, SUM(GUESTCOUNT) AS TotalGuests, SUM(BASICSUM) AS TotalSales, ROUND(AVG(CAST(GUESTCOUNT AS FLOAT)),2) AS AvgGuests, ROUND(SUM(BASICSUM)/NULLIF(SUM(GUESTCOUNT),0),2) AS SalesPerGuest FROM STAT_RK7_SHIFTS_CHECKS WHERE CAST(SHIFTDATE AS DATE)>=@df AND CAST(SHIFTDATE AS DATE)<=@dt GROUP BY CAST(SHIFTDATE AS DATE) ORDER BY SaleDate DESC`
 };
 
+async function api(method, path, body) {
+  const opts = { method, headers: {} };
+  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const res = await fetch(API_URL + path, opts);
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text().catch(() => '')}`);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
 async function runQuery(query, df, dt) {
   const pool = await sql.connect(sqlConfig);
   const request = pool.request();
@@ -53,75 +61,70 @@ async function processJob(job) {
   console.log(`[${new Date().toISOString()}] Running: ${job.report_id} (${job.date_from} to ${job.date_to})`);
 
   // Claim the job
-  const claimRes = await fetch(`${config.supabaseUrl}/rest/v1/rpc/claim_job`, { method: 'POST' }).catch(() => null);
-  if (!claimRes) {
-    // Direct API fallback
-    const claim = await fetch(`${config.apiUrl}/api/agent/${apiKey}/claim`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: job.id })
-    }).then(r => r.json()).catch(() => null);
-    if (!claim) return;
-    job = claim;
-  }
+  await api('POST', `/api/agent/${API_KEY}/claim`, { job_id: job.id });
 
   try {
     const query = QUERIES[job.report_id];
     if (!query) throw new Error(`Unknown report: ${job.report_id}`);
 
     const data = await runQuery(query, job.date_from, job.date_to);
+    console.log(`  Fetched ${data.length} rows from SQL`);
 
     // Push result
-    const pushRes = await fetch(`${config.apiUrl || config.supabaseUrl.replace('.supabase.co', '.vercel.app')}/api/agent/${apiKey}/push`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        job_id: job.id, report_id: job.report_id,
-        date_from: job.date_from, date_to: job.date_to,
-        data: data, columns: null
-      })
+    const result = await api('POST', `/api/agent/${API_KEY}/push`, {
+      job_id: job.id, report_id: job.report_id,
+      date_from: job.date_from, date_to: job.date_to,
+      data: data
     });
-    const result = await pushRes.json();
-    console.log(`[${new Date().toISOString()}] Completed: ${job.report_id} - ${result.status}`);
+    console.log(`  Completed: ${result.status}`);
   } catch (err) {
-    console.error(`[${new Date().toISOString()}] Error: ${job.report_id} - ${err.message}`);
-    await fetch(`${config.apiUrl || config.supabaseUrl.replace('.supabase.co', '.vercel.app')}/api/agent/${apiKey}/push`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: job.id, report_id: job.report_id, error: err.message })
+    console.error(`  Error: ${err.message}`);
+    await api('POST', `/api/agent/${API_KEY}/push`, {
+      job_id: job.id, report_id: job.report_id, error: err.message
     });
   }
 }
 
 async function main() {
-  console.log(`[${new Date().toISOString()}] Agent started for restaurant API key: ${apiKey.slice(0,8)}...`);
-  console.log(`Polling every ${POLL_INTERVAL/1000}s...`);
+  console.log(`\n=== R-Keeper Report Agent ===`);
+  console.log(`API: ${API_URL}`);
+  console.log(`Key: ${API_KEY.slice(0,12)}...`);
+  console.log(`SQL: ${config.sql.server}\\${config.sql.database}`);
+  console.log(`Poll: every ${POLL_MS/1000}s\n`);
 
-  // If --run-once, just test SQL connection
+  // Run-once mode
+  if (process.argv.includes('--once')) {
+    console.log('Running once (polling disabled)...');
+    while (true) {
+      const jobs = await api('GET', `/api/agent/${API_KEY}/jobs`);
+      if (!jobs || jobs.length === 0) { console.log('No pending jobs. Exiting.'); break; }
+      for (const job of jobs) await processJob(job);
+    }
+    process.exit(0);
+  }
+
+  // Test mode
   if (process.argv.includes('--test')) {
     try {
       const pool = await sql.connect(sqlConfig);
       const result = await pool.request().query('SELECT COUNT(*) AS cnt FROM STAT_RK7_SHIFTS_OPERATION');
       console.log(`SQL OK: ${result.recordset[0].cnt} operation rows`);
+      const apiTest = await api('GET', `/api/agent/${API_KEY}/jobs`);
+      console.log(`API OK: ${apiTest.length} pending jobs`);
       await pool.close();
-    } catch (err) {
-      console.error(`SQL ERROR: ${err.message}`);
-    }
+    } catch (err) { console.error(`TEST FAILED: ${err.message}`); }
     process.exit(0);
   }
 
   // Continuous polling mode
+  console.log('Waiting for jobs... (Ctrl+C to stop)');
   while (true) {
     try {
-      const res = await fetch(`${config.apiUrl || config.supabaseUrl.replace('.supabase.co', '.vercel.app')}/api/agent/${apiKey}/jobs`);
-      if (res.ok) {
-        const jobs = await res.json();
-        for (const job of jobs) {
-          await processJob(job);
-        }
-      }
-    } catch (err) {
-      console.error(`Poll error: ${err.message}`);
-    }
-    await new Promise(r => setTimeout(r, POLL_INTERVAL));
+      const jobs = await api('GET', `/api/agent/${API_KEY}/jobs`);
+      for (const job of jobs) await processJob(job);
+    } catch (err) { /* poll errors are normal when idle */ }
+    await new Promise(r => setTimeout(r, POLL_MS));
   }
 }
 
-main().catch(console.error);
+main().catch(err => { console.error('FATAL:', err.message); process.exit(1); });

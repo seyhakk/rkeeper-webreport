@@ -1,0 +1,13 @@
+{
+  "_comment": "Place this file next to Agent.exe on the restaurant PC",
+  "apiUrl": "https://rkeeper-reports.vercel.app",
+  "apiKey": "REPLACE_WITH_RESTAURANT_API_KEY",
+  "pollInterval": 3,
+  "sql": {
+    "server": "localhost\\SQLEXPRESS",
+    "database": "RKDEMO",
+    "user": "sa",
+    "password": "REPLACE_WITH_SQL_PASSWORD",
+    "port": 1433
+  }
+}

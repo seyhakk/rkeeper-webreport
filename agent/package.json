@@ -1,19 +1,20 @@
 {
   "name": "rkeeper-agent",
   "version": "1.0.0",
-  "description": "R-Keeper Report Agent - runs on restaurant PC to sync SQL data",
+  "description": "R-Keeper Report Agent - runs on restaurant PC to sync SQL data to cloud",
   "main": "agent.js",
   "scripts": {
     "start": "node agent.js",
-    "build": "pkg agent.js --targets node18-win-x64 -o Agent.exe --public"
+    "test": "node agent.js --test",
+    "once": "node agent.js --once",
+    "build": "pkg agent.js --targets node18-win-x64 -o Agent.exe",
+    "build-test": "pkg agent.js --targets node18-win-x64 -o Agent.exe && node test-Agent.exe --test"
   },
-  "bin": "agent.js",
   "pkg": {
     "assets": ["config.json"]
   },
   "dependencies": {
-    "mssql": "^10.0.1",
-    "@supabase/supabase-js": "^2.39.0"
+    "mssql": "^10.0.1"
   },
   "devDependencies": {
     "pkg": "^5.8.1"
