@@ -126,6 +126,34 @@ app.get('/r/:slug/:reportId', async (req, res) => {
   if (!report) return res.status(404).send('Report not found');
 
   const config = reportTemplates[report.id];
+
+  // If ?job=jobId is set, try to load result data
+  if (req.query.job) {
+    const { data: result } = await supabase.from('sync_results').select('*').eq('job_id', req.query.job).single();
+    if (result) {
+      // Clean up after rendering
+      await supabase.from('sync_results').delete().eq('job_id', req.query.job);
+      await supabase.from('sync_jobs').delete().eq('id', req.query.job);
+      return res.render(config.template, {
+        title: restaurant.name + ' - ' + report.name,
+        slug: req.params.slug,
+        report: { id: report.id, name: report.name, description: report.description, icon: report.icon, groupBy: config.groupBy },
+        data: result.data, error: null,
+        params: { DateFrom: result.date_from, DateTo: result.date_to },
+        columns: config.columns, filters: config.filters || [], filterOpts: null
+      });
+    }
+    // Result not ready yet — pass syncJobId for polling
+    return res.render(config.template, {
+      title: restaurant.name + ' - ' + report.name,
+      slug: req.params.slug,
+      report: { id: report.id, name: report.name, description: report.description, icon: report.icon, groupBy: config.groupBy },
+      data: null, error: null, params: null,
+      columns: config.columns, filters: config.filters || [], filterOpts: null,
+      syncJobId: req.query.job
+    });
+  }
+
   res.render(config.template, {
     title: restaurant.name + ' - ' + report.name,
     slug: req.params.slug,
@@ -135,7 +163,7 @@ app.get('/r/:slug/:reportId', async (req, res) => {
   });
 });
 
-// POST: user clicks Run → create sync job
+// POST: user clicks Run → create sync job → redirect to GET with job param
 app.post('/r/:slug/:reportId', async (req, res) => {
   const restaurant = await getRestaurant(req.params.slug);
   if (!restaurant) return res.status(404).send('Restaurant not found');
@@ -166,20 +194,11 @@ app.post('/r/:slug/:reportId', async (req, res) => {
     });
   }
 
-  const config = reportTemplates[report.id];
-  res.render(config.template, {
-    title: restaurant.name + ' - ' + report.name,
-    slug: req.params.slug,
-    report: { id: report.id, name: report.name, description: report.description, icon: report.icon },
-    data: null, error: null, params: req.body,
-    columns: config.columns, filters: config.filters || [], filterOpts: null,
-    syncJobId: job.id,
-    supabaseUrl: supabaseUrl,
-    supabaseAnonKey: supabaseKey
-  });
+  // Redirect to GET with job parameter — page will poll if not ready
+  res.redirect('/r/' + req.params.slug + '/' + report.id + '?job=' + job.id);
 });
 
-// AJAX: poll for job result
+// AJAX: poll for job completion status (does NOT delete — GET handler cleans up)
 app.get('/api/jobs/:jobId/result', async (req, res) => {
   const { data: job } = await supabase.from('sync_jobs').select('*').eq('id', req.params.jobId).single();
   if (!job) return res.json({ status: 'not_found' });
@@ -189,12 +208,8 @@ app.get('/api/jobs/:jobId/result', async (req, res) => {
   const { data: result } = await supabase.from('sync_results').select('*').eq('job_id', req.params.jobId).single();
   if (!result) return res.json({ status: 'no_data' });
 
-  // Return data and schedule deletion
   res.json({ status: 'completed', data: result.data, report_id: result.report_id, columns: result.columns });
-
-  // Delete after delivery
-  await supabase.from('sync_results').delete().eq('job_id', req.params.jobId);
-  await supabase.from('sync_jobs').delete().eq('id', req.params.jobId);
+  // Data is NOT deleted here — the GET /r/:slug/:reportId?job=jobId handler cleans up after rendering
 });
 
 // ============ AGENT API ============

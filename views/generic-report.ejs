@@ -342,6 +342,33 @@
                 alert('Please select both From and To dates.');
             }
         });
+
+        <% if (typeof syncJobId !== 'undefined' && syncJobId) { %>
+        (function() {
+            var jobId = '<%= syncJobId %>';
+            var el = document.getElementById('resultContainer');
+            if (!el) el = document.querySelector('.container');
+            if (el) el.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary mb-3" role="status"></div><p class="text-muted">Waiting for agent to fetch data...</p></div>';
+            var attempts = 0;
+            var timer = setInterval(function() {
+                attempts++;
+                fetch('/api/jobs/' + jobId + '/result')
+                    .then(function(r) { return r.json(); })
+                    .then(function(j) {
+                        if (j.status === 'completed' || j.status === 'no_data') {
+                            clearInterval(timer);
+                            window.location.href = '/r/<%= slug %>/<%= report.id %>?job=' + jobId;
+                        } else if (j.status === 'failed') {
+                            clearInterval(timer);
+                            alert('Error: ' + (j.error || 'Job failed'));
+                            window.location.href = '/r/<%= slug %>/<%= report.id %>';
+                        }
+                    })
+                    .catch(function() {});
+                if (attempts > 150) { clearInterval(timer); window.location.href = '/r/<%= slug %>/<%= report.id %>'; }
+            }, 2000);
+        })();
+        <% } %>
     </script>
 </body>
 </html>
