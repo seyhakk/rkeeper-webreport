@@ -54,7 +54,7 @@
         </div>
 
         <div class="filter-bar no-print">
-            <form method="POST" action="/report/<%= report.id %>" id="filterForm" class="d-flex align-items-center gap-3 flex-wrap">
+            <form method="POST" action="/r/<%= slug %>/<%= report.id %>" id="filterForm" class="d-flex align-items-center gap-3 flex-wrap">
                 <div><label>From:</label><input type="date" name="DateFrom" id="DateFrom" value="<%= params && params.DateFrom ? params.DateFrom : '' %>"></div>
                 <div><label>To:</label><input type="date" name="DateTo" id="DateTo" value="<%= params && params.DateTo ? params.DateTo : '' %>"></div>
                 <button type="submit" class="btn-export" style="background:#007bff;"><i class="bi bi-search"></i> Run</button>

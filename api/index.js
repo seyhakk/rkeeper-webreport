@@ -128,6 +128,7 @@ app.get('/r/:slug/:reportId', async (req, res) => {
   const config = reportTemplates[report.id];
   res.render(config.template, {
     title: restaurant.name + ' - ' + report.name,
+    slug: req.params.slug,
     report: { id: report.id, name: report.name, description: report.description, icon: report.icon, groupBy: config.groupBy },
     data: null, error: null, params: null,
     columns: config.columns, filters: config.filters || [], filterOpts: null
@@ -158,6 +159,7 @@ app.post('/r/:slug/:reportId', async (req, res) => {
     const config = reportTemplates[report.id];
     return res.render(config.template, {
       title: restaurant.name + ' - ' + report.name,
+      slug: req.params.slug,
       report: { id: report.id, name: report.name, description: report.description, icon: report.icon },
       data: null, error: 'Failed to create sync job: ' + error.message, params: req.body,
       columns: config.columns, filters: config.filters || [], filterOpts: null
@@ -167,6 +169,7 @@ app.post('/r/:slug/:reportId', async (req, res) => {
   const config = reportTemplates[report.id];
   res.render(config.template, {
     title: restaurant.name + ' - ' + report.name,
+    slug: req.params.slug,
     report: { id: report.id, name: report.name, description: report.description, icon: report.icon },
     data: null, error: null, params: req.body,
     columns: config.columns, filters: config.filters || [], filterOpts: null,
