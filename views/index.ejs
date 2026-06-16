@@ -34,31 +34,14 @@
                 </div>
                 <div class="text-end small" id="dateRange"></div>
             </div>
+            <div class="mt-1">
+                <a href="/admin/restaurants" class="btn btn-outline-light btn-sm"><i class="bi bi-gear"></i></a>
+                <a href="/r" class="btn btn-outline-light btn-sm"><i class="bi bi-building"></i></a>
+            </div>
         </div>
     </div>
 
     <div class="container" style="margin-top:-20px;">
-        <% if (restaurants && restaurants.length > 0) { %>
-        <div class="mb-4">
-            <h5 class="fw-semibold mb-3"><i class="bi bi-shop"></i> Select Restaurant</h5>
-            <div class="row g-3">
-                <% restaurants.forEach(function(r) { %>
-                <div class="col-md-6 col-lg-4">
-                    <a href="/r/<%= r.slug %>" class="report-link">
-                        <div class="card report-card h-100">
-                            <div class="card-body d-flex flex-column">
-                                <h5 class="card-title"><i class="bi bi-building" style="font-size:1.8rem;"></i></h5>
-                                <h6 class="card-subtitle mb-1"><%= r.name %></h6>
-                                <small class="text-muted">slug: <%= r.slug %></small>
-                                <div class="mt-auto pt-2"><span class="badge bg-primary">Open Reports</span></div>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <% }); %>
-            </div>
-        </div>
-        <% } else { %>
         <div class="row g-3 mb-4" id="statCards"></div>
 
         <div class="row g-3 mb-4">
@@ -106,7 +89,7 @@
                     </div>
                 </a>
             </div>
-            <% }); } %>
+            <% }); %>
         </div>
     </div>
 

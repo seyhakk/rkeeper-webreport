@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= isNew ? 'New Restaurant' : 'Edit: ' + (r ? r.name : '') %> - <%= title %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background: #f0f2f5; }
+        .hero { background: linear-gradient(135deg, #1a237e, #0d47a1, #01579b); color: white; padding: 28px 0 32px; }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <div class="container d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="mb-0"><%= isNew ? 'New Restaurant' : 'Edit: ' + r.name %></h2>
+                <small class="opacity-75"><%= title %></small>
+            </div>
+            <a href="/admin/restaurants" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+        </div>
+    </div>
+
+    <div class="container" style="margin-top:-20px;">
+        <% if (error) { %><div class="alert alert-danger"><%= error %></div><% } %>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <form method="POST" action="/admin/restaurants<%= isNew ? '' : '/' + r.id + '/edit' %>">
+                    <div class="mb-3">
+                        <label class="form-label">Restaurant Name</label>
+                        <input type="text" name="name" class="form-control" value="<%= r ? r.name : '' %>" required placeholder="e.g. LINGER KNR" <%= isNew ? '' : 'oninput="document.getElementById(\'slugPreview\').textContent=this.value.toLowerCase().replace(/[^a-z0-9]+/g,\'-\').replace(/^-|-$/g,\'\')" ' %>>
+                    </div>
+
+                    <% if (isNew) { %>
+                    <div class="mb-3">
+                        <label class="form-label">Slug</label>
+                        <input type="text" name="slug" class="form-control" placeholder="linger-knr" required pattern="[a-z0-9-]+">
+                        <div class="form-text">URL: /r/<span id="slugPreview"></span></div>
+                    </div>
+                    <% } else { %>
+                    <div class="mb-3">
+                        <label class="form-label">Slug</label>
+                        <input type="text" class="form-control" value="<%= r.slug %>" disabled>
+                        <div class="form-text text-muted">Slug is locked after creation.</div>
+                    </div>
+                    <% } %>
+
+                    <% if (!isNew) { %>
+                    <div class="mb-3">
+                        <label class="form-label">API Key</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace" id="apiKeyInput" value="<%= r.api_key %>" readonly>
+                            <button class="btn btn-outline-secondary" type="button" onclick="document.getElementById('apiKeyInput').type='text';document.getElementById('apiKeyInput').select();navigator.clipboard.writeText(document.getElementById('apiKeyInput').value)"><i class="bi bi-clipboard"></i></button>
+                            <a href="/admin/restaurants/<%= r.id %>/regenerate-key" class="btn btn-outline-warning" onclick="return confirm('Regenerate API key? The old key will stop working.')"><i class="bi bi-arrow-counterclockwise"></i> Regenerate</a>
+                        </div>
+                    </div>
+                    <% } %>
+
+                    <hr>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save</button>
+                        <a href="/admin/restaurants" class="btn btn-secondary">Cancel</a>
+                        <% if (!isNew) { %>
+                        <form method="POST" action="/admin/restaurants/<%= r.id %>/delete" style="margin-left:auto" onsubmit="return confirm('Delete <%= r.name %>?')">
+                            <button class="btn btn-outline-danger"><i class="bi bi-trash"></i> Delete</button>
+                        </form>
+                        <% } %>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

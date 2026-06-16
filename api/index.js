@@ -109,7 +109,7 @@ app.get('/', (req, res) => res.redirect('/r'));
 
 app.get('/r', async (req, res) => {
   const { data: restaurants } = await supabase.from('restaurants').select('*').order('name');
-  res.render('index', { title: 'R-Keeper Reports', reports: reports, restaurants: restaurants || [] });
+  res.render('restaurants', { title: 'R-Keeper Reports', restaurants: restaurants || [] });
 });
 
 app.get('/r/:slug', async (req, res) => {
@@ -240,6 +240,61 @@ app.post('/api/agent/:apiKey/claim', async (req, res) => {
 
   const { data: job } = await supabase.from('sync_jobs').select('*').eq('id', job_id).single();
   res.json(job);
+});
+
+// ============ ADMIN ROUTES ============
+
+app.get('/admin/restaurants', async (req, res) => {
+  const { data: restaurants, error } = await supabase.from('restaurants').select('*').order('name');
+  res.render('admin-list', { title: 'R-Keeper Reports', restaurants: restaurants || [], error: null, success: req.query.success || null });
+});
+
+app.get('/admin/restaurants/new', (req, res) => {
+  res.render('admin-form', { title: 'R-Keeper Reports', r: null, isNew: true, error: null });
+});
+
+app.post('/admin/restaurants', async (req, res) => {
+  const { name, slug } = req.body;
+  if (!name || !slug) return res.render('admin-form', { title: 'R-Keeper Reports', r: null, isNew: true, error: 'Name and slug are required.' });
+
+  const { error } = await supabase.from('restaurants').insert({
+    name: name.trim(),
+    slug: slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, ''),
+    api_key: [...Array(32)].map(() => Math.random().toString(36)[2]).join('')
+  });
+
+  if (error) return res.render('admin-form', { title: 'R-Keeper Reports', r: null, isNew: true, error: error.message });
+  res.redirect('/admin/restaurants?success=Restaurant created');
+});
+
+app.get('/admin/restaurants/:id/edit', async (req, res) => {
+  const { data: r, error } = await supabase.from('restaurants').select('*').eq('id', req.params.id).single();
+  if (error || !r) return res.redirect('/admin/restaurants?error=Not found');
+  res.render('admin-form', { title: 'R-Keeper Reports', r, isNew: false, error: null });
+});
+
+app.post('/admin/restaurants/:id/edit', async (req, res) => {
+  const { name } = req.body;
+  if (!name) return res.redirect('/admin/restaurants/' + req.params.id + '/edit?error=Name is required');
+
+  const { error } = await supabase.from('restaurants').update({ name: name.trim() }).eq('id', req.params.id);
+  if (error) return res.redirect('/admin/restaurants/' + req.params.id + '/edit?error=' + error.message);
+  res.redirect('/admin/restaurants?success=Updated');
+});
+
+app.get('/admin/restaurants/:id/regenerate-key', async (req, res) => {
+  const newKey = [...Array(32)].map(() => Math.random().toString(36)[2]).join('');
+  const { error } = await supabase.from('restaurants').update({ api_key: newKey }).eq('id', req.params.id);
+  if (error) return res.redirect('/admin/restaurants?error=' + error.message);
+  res.redirect('/admin/restaurants?success=API key regenerated');
+});
+
+app.post('/admin/restaurants/:id/delete', async (req, res) => {
+  await supabase.from('sync_results').delete().eq('restaurant_id', req.params.id);
+  await supabase.from('sync_jobs').delete().eq('restaurant_id', req.params.id);
+  const { error } = await supabase.from('restaurants').delete().eq('id', req.params.id);
+  if (error) return res.redirect('/admin/restaurants?error=' + error.message);
+  res.redirect('/admin/restaurants?success=Deleted');
 });
 
 // ============ EXPORT ============
