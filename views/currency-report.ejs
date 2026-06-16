@@ -29,6 +29,7 @@
 
         @media print { .no-print { display: none !important; } }
         @media (max-width: 768px) { .report-table td { padding: 2px 4px; font-size: 11px; } }
+        .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; }
     </style>
 </head>
 <body class="iscs0">
@@ -52,10 +53,10 @@
         </div>
 
         <div class="filter-bar no-print">
-            <form method="POST" action="/r/<%= slug %>/<%= report.id %>" id="filterForm" class="d-flex align-items-center gap-3 flex-wrap">
+            <form id="filterForm" class="d-flex align-items-center gap-3 flex-wrap">
                 <div><label>From:</label><input type="date" name="DateFrom" id="DateFrom" value="<%= params && params.DateFrom ? params.DateFrom : '' %>"></div>
                 <div><label>To:</label><input type="date" name="DateTo" id="DateTo" value="<%= params && params.DateTo ? params.DateTo : '' %>"></div>
-                <button type="submit" class="btn-export" style="background:#007bff;"><i class="bi bi-search"></i> Run</button>
+                <button type="submit" id="runBtn" class="btn-export" style="background:#007bff;"><i class="bi bi-search"></i> Run</button>
             </form>
         </div>
 
@@ -223,39 +224,70 @@
             link.download = 'currency-sales-' + new Date().toISOString().slice(0,10) + '.csv';
             link.click();
         }
+        var loadingOverlay = null;
+        function showLoading(msg) {
+            hideLoading();
+            loadingOverlay = document.createElement('div');
+            loadingOverlay.className = 'loading-overlay';
+            loadingOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;';
+            loadingOverlay.innerHTML = '<div class="spinner-border text-primary mb-3" style="width:3rem;height:3rem;"></div><p class="text-muted" id="loadingMsg">' + (msg || 'Running report...') + '</p>';
+            document.body.appendChild(loadingOverlay);
+        }
+        function hideLoading() {
+            if (loadingOverlay) { loadingOverlay.remove(); loadingOverlay = null; }
+        }
+        function updateLoading(msg) {
+            var el = document.getElementById('loadingMsg');
+            if (el) el.textContent = msg;
+        }
+
         document.getElementById('filterForm').addEventListener('submit', function(e) {
-            if (!document.getElementById('DateFrom').value || !document.getElementById('DateTo').value) {
-                e.preventDefault();
-                alert('Please select both From and To dates.');
-            }
+            e.preventDefault();
+            var from = document.getElementById('DateFrom').value;
+            var to = document.getElementById('DateTo').value;
+            if (!from || !to) { alert('Please select both From and To dates.'); return; }
+            showLoading('Creating sync job...');
+            fetch('/api/r/<%= slug %>/<%= report.id %>/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ DateFrom: from, DateTo: to })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(resp) {
+                if (resp.error) { hideLoading(); alert(resp.error); return; }
+                var jobId = resp.jobId;
+                updateLoading('Waiting for agent to fetch data...');
+                pollJob(jobId, 0);
+            })
+            .catch(function(err) { hideLoading(); alert('Failed: ' + err.message); });
         });
 
-        <% if (typeof syncJobId !== 'undefined' && syncJobId) { %>
-        (function() {
-            var jobId = '<%= syncJobId %>';
-            var el = document.getElementById('resultContainer');
-            if (!el) el = document.querySelector('.container');
-            if (el) el.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary mb-3" role="status"></div><p class="text-muted">Waiting for agent to fetch data...</p></div>';
-            var attempts = 0;
-            var timer = setInterval(function() {
-                attempts++;
-                fetch('/api/jobs/' + jobId + '/result')
-                    .then(function(r) { return r.json(); })
-                    .then(function(j) {
-                        if (j.status === 'completed' || j.status === 'no_data') {
-                            clearInterval(timer);
-                            window.location.href = '/r/<%= slug %>/<%= report.id %>?job=' + jobId + '&_=' + Date.now();
-                        } else if (j.status === 'failed') {
-                            clearInterval(timer);
-                            alert('Error: ' + (j.error || 'Job failed'));
-                            window.location.href = '/r/<%= slug %>/<%= report.id %>';
-                        }
-                    })
-                    .catch(function() {});
-                if (attempts > 150) { clearInterval(timer); window.location.href = '/r/<%= slug %>/<%= report.id %>'; }
-            }, 2000);
-        })();
-        <% } %>
+        function pollJob(jobId, attempt) {
+            if (attempt > 90) {
+                hideLoading();
+                if (confirm('Still waiting after 3 minutes. Retry?')) {
+                    document.getElementById('filterForm').dispatchEvent(new Event('submit'));
+                }
+                return;
+            }
+            fetch('/api/jobs/' + jobId + '/result')
+            .then(function(r) { return r.json(); })
+            .then(function(j) {
+                if (j.status === 'completed') {
+                    updateLoading('Data ready! Loading...');
+                    window.location.href = '/r/<%= slug %>/<%= report.id %>?job=' + jobId + '&_=' + Date.now();
+                } else if (j.status === 'failed') {
+                    hideLoading();
+                    alert('Error: ' + (j.error || 'Job failed'));
+                } else {
+                    updateLoading('Waiting for agent (' + (attempt + 1) + 's)');
+                    setTimeout(function() { pollJob(jobId, attempt + 1); }, 2000);
+                }
+            })
+            .catch(function() {
+                setTimeout(function() { pollJob(jobId, attempt + 1); }, 2000);
+            });
+        }
     </script>
 </body>
 </html>

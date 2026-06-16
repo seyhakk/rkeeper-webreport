@@ -205,6 +205,30 @@ app.post('/r/:slug/:reportId', async (req, res) => {
   res.redirect('/r/' + req.params.slug + '/' + report.id + '?job=' + job.id);
 });
 
+// AJAX: submit report job (JSON endpoint)
+app.post('/api/r/:slug/:reportId/submit', async (req, res) => {
+  const restaurant = await getRestaurant(req.params.slug);
+  if (!restaurant) return res.status(404).json({ error: 'Restaurant not found' });
+
+  const report = reports.find(r => r.id === req.params.reportId);
+  if (!report) return res.status(404).json({ error: 'Report not found' });
+
+  const dateFrom = req.body.DateFrom || new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+  const dateTo = req.body.DateTo || new Date().toISOString().slice(0,10);
+
+  const { data: job, error } = await supabase.from('sync_jobs').insert({
+    restaurant_id: restaurant.id,
+    report_id: report.id,
+    date_from: dateFrom,
+    date_to: dateTo,
+    status: 'pending'
+  }).select().single();
+
+  if (error) return res.status(500).json({ error: 'Failed to create sync job: ' + error.message });
+
+  res.json({ jobId: job.id });
+});
+
 // AJAX: poll for job completion status (does NOT delete — GET handler cleans up)
 app.get('/api/jobs/:jobId/result', async (req, res) => {
   const { data: jobRows } = await supabase.from('sync_jobs').select('*').eq('id', req.params.jobId);

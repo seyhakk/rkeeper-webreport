@@ -29,6 +29,9 @@
         .filter-row select { width: 100%; border: 1px solid #aaa; border-radius: 3px; padding: 2px 4px; font-size: 11px; box-sizing: border-box; max-height: 26px; cursor: pointer; background: #fff; }
         .filter-row { background: #eef3ff; }
 
+        .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; }
+        .loading-overlay .spinner-border { width: 3rem; height: 3rem; }
+
         @media print { .no-print { display: none !important; } .filter-row { display: none !important; } }
         @media (max-width: 768px) { .report-table td { padding: 2px 4px; font-size: 11px; } }
     </style>
@@ -54,24 +57,22 @@
         </div>
 
         <div class="filter-bar no-print">
-            <form method="POST" action="/r/<%= slug %>/<%= report.id %>" id="filterForm" class="d-flex align-items-center gap-3 flex-wrap">
+            <form id="filterForm" class="d-flex align-items-center gap-3 flex-wrap">
                 <div><label>From:</label><input type="date" name="DateFrom" id="DateFrom" value="<%= params && params.DateFrom ? params.DateFrom : '' %>"></div>
                 <div><label>To:</label><input type="date" name="DateTo" id="DateTo" value="<%= params && params.DateTo ? params.DateTo : '' %>"></div>
-                <button type="submit" class="btn-export" style="background:#007bff;"><i class="bi bi-search"></i> Run</button>
+                <button type="submit" class="btn-export" style="background:#007bff;" id="runBtn"><i class="bi bi-search"></i> Run</button>
                 <button type="button" class="btn-export" style="background:#6c757d;" onclick="clearFilters()"><i class="bi bi-x-circle"></i> Clear Filters</button>
             </form>
         </div>
 
-        <% if (error) { %>
-        <div class="alert alert-danger no-print"><i class="bi bi-exclamation-triangle"></i> <%= error %></div>
-        <% } %>
-
-        <% if (data && data.length > 0) { %>
-        <div style="overflow-x: auto;">
+        <div id="reportContent">
+            <% if (error) { %>
+            <div class="alert alert-danger no-print"><i class="bi bi-exclamation-triangle"></i> <%= error %></div>
+            <% } else if (data && data.length > 0) { %>
+            <div style="overflow-x: auto;">
             <%
                 var grouped = {};
                 var grandQty = 0, grandAmt = 0, grandPaid = 0, grandSurcharge = 0, grandDiscount = 0, grandTax = 0;
-
                 data.forEach(function(row) {
                     if (parseFloat(row.Quantity) === 0) return;
                     var cs = row.CashServer || 'Unknown';
@@ -89,69 +90,53 @@
             %>
             <table class="report-table" id="reportTable">
                 <thead>
-                    <tr>
-                        <td class="iscs7" colspan="10" style="font-size:14px;font-weight:bold;">&nbsp; <%= report.name %></td>
-                    </tr>
+                    <tr><td class="iscs7" colspan="10" style="font-size:14px;font-weight:bold;">&nbsp; <%= report.name %></td></tr>
                     <tr>
                         <td class="iscs1">&nbsp;Cash server&nbsp;</td>
-                        <td class="iscs1">&nbsp;Report Category&nbsp;</td>
+                        <td class="iscs1">&nbsp;Category&nbsp;</td>
                         <td class="iscs1">&nbsp;Dish&nbsp;</td>
                         <td class="iscs6">Quantity</td>
                         <td class="iscs6">Avg Price</td>
                         <td class="iscs6">Amount</td>
-                        <td class="iscs6">Discount Sum</td>
+                        <td class="iscs6">Discount</td>
                         <td class="iscs6">Paid Amount</td>
-                        <td class="iscs6">Tax 'SVC'-Amount</td>
+                        <td class="iscs6">Tax 'SVC'</td>
                         <td class="iscs6">SURCHARGE 5%'</td>
                     </tr>
                     <tr class="filter-row no-print">
-                        <td><select id="f_cs" onchange="filterTable()"><option value="">All</option>
-                            <% if (filterOpts && filterOpts.cashServers) { filterOpts.cashServers.forEach(function(v) { %><option value="<%= v %>"><%= v %></option><% }); } %>
-                        </select></td>
-                        <td><select id="f_cat" onchange="filterTable()"><option value="">All</option>
-                            <% if (filterOpts && filterOpts.categories) { filterOpts.categories.forEach(function(v) { %><option value="<%= v %>"><%= v %></option><% }); } %>
-                        </select></td>
-                        <td><select id="f_dish" onchange="filterTable()"><option value="">All</option>
-                            <% if (filterOpts && filterOpts.dishes) { filterOpts.dishes.forEach(function(v) { %><option value="<%= v %>"><%= v %></option><% }); } %>
-                        </select></td>
-                        <td><select id="f_qty" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">=5">&ge; 5</option><option value=">=10">&ge; 10</option><option value=">=20">&ge; 20</option></select></td>
-                        <td><select id="f_avg" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">5">&gt; 5</option><option value=">10">&gt; 10</option><option value=">20">&gt; 20</option></select></td>
-                        <td><select id="f_amt" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">10">&gt; 10</option><option value=">50">&gt; 50</option><option value=">100">&gt; 100</option></select></td>
+                        <td><select id="f_cs" onchange="filterTable()"><option value="">All</option></select></td>
+                        <td><select id="f_cat" onchange="filterTable()"><option value="">All</option></select></td>
+                        <td><select id="f_dish" onchange="filterTable()"><option value="">All</option></select></td>
+                        <td><select id="f_qty" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">=5">&ge; 5</option><option value=">=10">&ge; 10</option></select></td>
+                        <td><select id="f_avg" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">5">&gt; 5</option></select></td>
+                        <td><select id="f_amt" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">10">&gt; 10</option></select></td>
                         <td><select id="f_disc" onchange="filterTable()"><option value="">All</option><option value="!=0">&ne; 0</option></select></td>
-                        <td><select id="f_paid" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">10">&gt; 10</option><option value=">50">&gt; 50</option><option value=">100">&gt; 100</option></select></td>
+                        <td><select id="f_paid" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option></select></td>
                         <td><select id="f_tax" onchange="filterTable()"><option value="">All</option><option value="!=0">&ne; 0</option></select></td>
-                        <td><select id="f_sc" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">5">&gt; 5</option></select></td>
+                        <td><select id="f_sc" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option></select></td>
                     </tr>
                 </thead>
                 <tbody>
-                <%
-                    var serverKeys = Object.keys(grouped).sort();
-                    for (var si = 0; si < serverKeys.length; si++) {
-                        var cs = serverKeys[si];
-                        var cats = grouped[cs];
-                        var catKeys = Object.keys(cats).sort();
-
-                        // count total rows for this server
-                        var csTotalRows = 0;
-                        for (var ci = 0; ci < catKeys.length; ci++) {
-                            csTotalRows += cats[catKeys[ci]].length + 1;
-                        }
-
-                        var csRowNum = 0;
-                        for (var ci = 0; ci < catKeys.length; ci++) {
-                            var cat = catKeys[ci];
-                            var items = cats[cat];
-                            var catQty = 0, catAmt = 0, catPaid = 0, catSurcharge = 0, catDiscount = 0, catTax = 0;
-
-                            for (var ii = 0; ii < items.length; ii++) {
-                                var row = items[ii];
-                                catQty += parseFloat(row.Quantity) || 0;
-                                catAmt += parseFloat(row.Amount) || 0;
-                                catPaid += parseFloat(row.PaidAmount) || 0;
-                                catSurcharge += parseFloat(row.Surcharge5Pct) || 0;
-                                catDiscount += parseFloat(row.DiscountSum) || 0;
-                                catTax += parseFloat(row.TaxSVC) || 0;
-                %>
+                <% var serverKeys = Object.keys(grouped).sort();
+                   for (var si = 0; si < serverKeys.length; si++) {
+                       var cs = serverKeys[si];
+                       var cats = grouped[cs];
+                       var catKeys = Object.keys(cats).sort();
+                       var csTotalRows = 0;
+                       for (var ci = 0; ci < catKeys.length; ci++) csTotalRows += cats[catKeys[ci]].length + 1;
+                       var csRowNum = 0;
+                       for (var ci = 0; ci < catKeys.length; ci++) {
+                           var cat = catKeys[ci];
+                           var items = cats[cat];
+                           var catQty = 0, catAmt = 0, catPaid = 0, catSurcharge = 0, catDiscount = 0, catTax = 0;
+                           for (var ii = 0; ii < items.length; ii++) {
+                               var row = items[ii];
+                               catQty += parseFloat(row.Quantity) || 0;
+                               catAmt += parseFloat(row.Amount) || 0;
+                               catPaid += parseFloat(row.PaidAmount) || 0;
+                               catSurcharge += parseFloat(row.Surcharge5Pct) || 0;
+                               catDiscount += parseFloat(row.DiscountSum) || 0;
+                               catTax += parseFloat(row.TaxSVC) || 0; %>
                     <tr data-cs="<%= cs %>" data-cat="<%= cat %>" data-dish="<%= row.Dish %>"
                         data-qty="<%= row.Quantity %>" data-avg="<%= row.AvgPrice %>" data-amt="<%= row.Amount %>"
                         data-disc="<%= row.DiscountSum %>" data-paid="<%= row.PaidAmount %>"
@@ -167,10 +152,7 @@
                         <td class="iscs3">&nbsp;<%= parseFloat(row.TaxSVC).toFixed(2) %>&nbsp;</td>
                         <td class="iscs3">&nbsp;<%= parseFloat(row.Surcharge5Pct).toFixed(2) %>&nbsp;</td>
                     </tr>
-                <%
-                                csRowNum++;
-                            }
-                %>
+                <% csRowNum++; } %>
                     <tr class="cat-subtotal" style="background:#F0F0F0;" data-cat="<%= cat %>">
                         <td class="iscs4" colspan="2">&nbsp;<%= cat %> total&nbsp;</td>
                         <td class="iscs4">&nbsp;<%= catQty.toFixed(3) %>&nbsp;</td>
@@ -181,11 +163,7 @@
                         <td class="iscs4">&nbsp;<%= catTax.toFixed(2) %>&nbsp;</td>
                         <td class="iscs4">&nbsp;<%= catSurcharge.toFixed(2) %>&nbsp;</td>
                     </tr>
-                <%
-                            csRowNum++;
-                        }
-                    }
-                %>
+                <% csRowNum++; } } %>
                     <tr id="grandTotalRow">
                         <td class="iscs9" colspan="3">&nbsp;Grand Total&nbsp;</td>
                         <td class="iscs9">&nbsp;<%= grandQty.toFixed(3) %>&nbsp;</td>
@@ -198,20 +176,20 @@
                     </tr>
                 </tbody>
             </table>
+            <div class="mt-2 mb-4 no-print">
+                <small class="text-muted">
+                    <i class="bi bi-info-circle"></i>
+                    Showing <span id="visibleCount"><%= data.filter(function(r){return parseFloat(r.Quantity)>0}).length %></span> items | Generated: <%= new Date().toLocaleString() %>
+                </small>
+            </div>
+            </div>
+            <% } else { %>
+            <div class="text-center text-muted py-5" id="emptyState">
+                <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                <p class="mt-2">No data found. Select dates and click Run.</p>
+            </div>
+            <% } %>
         </div>
-
-        <div class="mt-2 mb-4 no-print">
-            <small class="text-muted">
-                <i class="bi bi-info-circle"></i>
-                Showing <span id="visibleCount"><%= data.filter(function(r){return parseFloat(r.Quantity)>0}).length %></span> items | Generated: <%= new Date().toLocaleString() %>
-            </small>
-        </div>
-        <% } else if (!error) { %>
-        <div class="text-center text-muted py-5">
-            <i class="bi bi-inbox" style="font-size: 3rem;"></i>
-            <p class="mt-2">No data found. Please select a date range and click Run.</p>
-        </div>
-        <% } %>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -240,12 +218,10 @@
             var fpaid = document.getElementById('f_paid').value;
             var ftax = document.getElementById('f_tax').value;
             var fsc = document.getElementById('f_sc').value;
-
             var hasFilter = fcs || fcat || fdish || fqty || favg || famt || fdisc || fpaid || ftax || fsc;
             var rows = document.querySelectorAll('#reportTable tbody tr[data-cs]');
             var visibleRows = [];
             var visibleCats = {};
-
             rows.forEach(function(row) {
                 var show = true;
                 if (hasFilter) {
@@ -263,13 +239,11 @@
                 row.style.display = show ? '' : 'none';
                 if (show) { visibleRows.push(row); visibleCats[row.dataset.cat] = true; }
             });
-
             document.querySelectorAll('.cat-subtotal').forEach(function(st) {
                 st.style.display = visibleCats[st.dataset.cat] ? '' : 'none';
             });
-
-            document.getElementById('visibleCount').textContent = visibleRows.length;
-
+            var vc = document.getElementById('visibleCount');
+            if (vc) vc.textContent = visibleRows.length;
             var grandRow = document.getElementById('grandTotalRow');
             if (grandRow) {
                 var gQty = 0, gAmt = 0, gPaid = 0, gSurcharge = 0, gDiscount = 0, gTax = 0;
@@ -321,44 +295,69 @@
             filterTable();
         }
 
+        var loadingOverlay = null;
+        function showLoading(msg) {
+            hideLoading();
+            loadingOverlay = document.createElement('div');
+            loadingOverlay.className = 'loading-overlay';
+            loadingOverlay.innerHTML = '<div class="spinner-border text-primary mb-3"></div><p class="text-muted" id="loadingMsg">' + (msg || 'Running report...') + '</p>';
+            document.body.appendChild(loadingOverlay);
+        }
+        function hideLoading() {
+            if (loadingOverlay) { loadingOverlay.remove(); loadingOverlay = null; }
+        }
+        function updateLoading(msg) {
+            var el = document.getElementById('loadingMsg');
+            if (el) el.textContent = msg;
+        }
+
         document.getElementById('filterForm').addEventListener('submit', function(e) {
+            e.preventDefault();
             var from = document.getElementById('DateFrom').value;
             var to = document.getElementById('DateTo').value;
-            if (!from || !to) {
-                e.preventDefault();
-                alert('Please select both From and To dates.');
-            }
+            if (!from || !to) { alert('Please select both From and To dates.'); return; }
+            showLoading('Creating sync job...');
+            fetch('/api/r/<%= slug %>/<%= report.id %>/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ DateFrom: from, DateTo: to })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(resp) {
+                if (resp.error) { hideLoading(); alert(resp.error); return; }
+                var jobId = resp.jobId;
+                updateLoading('Waiting for agent to fetch data...');
+                pollJob(jobId, 0);
+            })
+            .catch(function(err) { hideLoading(); alert('Failed: ' + err.message); });
         });
 
-        // ---- Async job polling ----
-        <% if (typeof syncJobId !== 'undefined' && syncJobId) { %>
-        (function() {
-            var jobId = '<%= syncJobId %>';
-            var el = document.getElementById('resultContainer');
-            if (!el) el = document.querySelector('.container');
-            if (el) el.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary mb-3" role="status"></div><p class="text-muted">Waiting for agent to fetch data...</p></div>';
-
-            var attempts = 0;
-            var timer = setInterval(function() {
-                attempts++;
-                fetch('/api/jobs/' + jobId + '/result')
-                    .then(function(r) { return r.json(); })
-                    .then(function(j) {
-                        if (j.status === 'completed' || j.status === 'no_data') {
-                            clearInterval(timer);
-                            window.location.href = '/r/<%= slug %>/<%= report.id %>?job=' + jobId + '&_=' + Date.now();
-                        } else if (j.status === 'failed') {
-                            clearInterval(timer);
-                            alert('Error: ' + (j.error || 'Job failed'));
-                            window.location.href = '/r/<%= slug %>/<%= report.id %>';
-                        }
-                        // else still pending/running — keep polling
-                    })
-                    .catch(function() {});
-                if (attempts > 150) { clearInterval(timer); window.location.href = '/r/<%= slug %>/<%= report.id %>'; }
-            }, 2000);
-        })();
-        <% } %>
+        function pollJob(jobId, attempt) {
+            if (attempt > 90) {
+                hideLoading();
+                if (confirm('Still waiting after 3 minutes. Retry?')) {
+                    document.getElementById('filterForm').dispatchEvent(new Event('submit'));
+                }
+                return;
+            }
+            fetch('/api/jobs/' + jobId + '/result')
+            .then(function(r) { return r.json(); })
+            .then(function(j) {
+                if (j.status === 'completed') {
+                    updateLoading('Data ready! Loading...');
+                    window.location.href = '/r/<%= slug %>/<%= report.id %>?job=' + jobId + '&_=' + Date.now();
+                } else if (j.status === 'failed') {
+                    hideLoading();
+                    alert('Error: ' + (j.error || 'Job failed'));
+                } else {
+                    updateLoading('Waiting for agent to fetch data... (' + (attempt + 1) + 's)');
+                    setTimeout(function() { pollJob(jobId, attempt + 1); }, 2000);
+                }
+            })
+            .catch(function() {
+                setTimeout(function() { pollJob(jobId, attempt + 1); }, 2000);
+            });
+        }
     </script>
 </body>
 </html>
