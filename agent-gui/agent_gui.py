@@ -5,7 +5,7 @@ import threading
 import time
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
-from datetime import datetime
+from datetime import datetime, date as date_type
 import pymssql
 import urllib.request
 import urllib.error
@@ -341,7 +341,7 @@ class AgentApp:
             for r in rows:
                 row = {}
                 for k, v in r.items():
-                    if isinstance(v, (datetime.date,)):
+                    if isinstance(v, (date_type,)):
                         row[k] = v.isoformat()
                     elif hasattr(v, '__float__'):
                         row[k] = float(v)

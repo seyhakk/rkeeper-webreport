@@ -119,6 +119,7 @@ app.get('/r/:slug', async (req, res) => {
 });
 
 app.get('/r/:slug/:reportId', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   const restaurant = await getRestaurant(req.params.slug);
   if (!restaurant) return res.status(404).send('Restaurant not found');
 
