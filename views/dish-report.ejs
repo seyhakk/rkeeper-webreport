@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= report.name %> - <%= title %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .iscs0 { background: #FFFFFF; color: #000000; font: normal normal 12px/1.4 Arial, sans-serif; }
+        .iscs1 { background: #C6D3EF; color: #000000; font: bold 12px/1.4 Arial, sans-serif; text-align: left; }
+        .iscs2 { background: #FFFFFF; color: #000000; text-align: left; }
+        .iscs3 { background: #FFFFFF; color: #000000; text-align: right; }
+        .iscs4 { background: #F0F0F0; color: #000000; font: bold 12px/1.4 Arial, sans-serif; text-align: right; }
+        .iscs6 { background: #FFFFFF; color: #000000; font: bold 12px/1.4 Arial, sans-serif; text-align: left; }
+        .iscs7 { background: #FFFFFF; color: #000000; text-align: left; }
+        .iscs9 { background: #D9E2F3; color: #000; font: bold 13px/1.4 Arial, sans-serif; text-align: right; }
+
+        .report-table { border-collapse: collapse; border: 1px solid #000; }
+        .report-table td { border: 1px solid #888; padding: 3px 6px; white-space: nowrap; font-size: 12px; }
+
+        .btn-export { background: #28a745; color: white; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .btn-export:hover { background: #218838; color: white; }
+
+        .filter-bar { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; }
+        .filter-bar input[type="date"] { border: 1px solid #ccc; border-radius: 4px; padding: 4px 8px; font-size: 13px; }
+        .filter-bar label { font-size: 13px; font-weight: 600; margin-right: 4px; }
+
+        .filter-row select { width: 100%; border: 1px solid #aaa; border-radius: 3px; padding: 2px 4px; font-size: 11px; box-sizing: border-box; max-height: 26px; cursor: pointer; background: #fff; }
+        .filter-row { background: #eef3ff; }
+
+        @media print { .no-print { display: none !important; } .filter-row { display: none !important; } }
+        @media (max-width: 768px) { .report-table td { padding: 2px 4px; font-size: 11px; } }
+    </style>
+</head>
+<body class="iscs0">
+    <nav class="navbar navbar-dark bg-dark no-print">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/"><i class="bi bi-bar-chart-line"></i> <%= title %></a>
+            <div class="d-flex gap-2">
+                <button class="btn-export" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+                <button class="btn-export" onclick="exportCSV()"><i class="bi bi-filetype-csv"></i> CSV</button>
+                <a href="/" class="btn-export" style="background:#6c757d;text-decoration:none;"><i class="bi bi-arrow-left"></i> Back</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-3 px-3">
+        <div class="d-flex justify-content-between align-items-center mb-2 no-print">
+            <div>
+                <h5 class="mb-0"><i class="bi bi-cup-hot text-danger"></i> <%= report.name %></h5>
+                <small class="text-muted"><%= report.description %></small>
+            </div>
+        </div>
+
+        <div class="filter-bar no-print">
+            <form method="POST" action="/report/<%= report.id %>" id="filterForm" class="d-flex align-items-center gap-3 flex-wrap">
+                <div><label>From:</label><input type="date" name="DateFrom" id="DateFrom" value="<%= params && params.DateFrom ? params.DateFrom : '' %>"></div>
+                <div><label>To:</label><input type="date" name="DateTo" id="DateTo" value="<%= params && params.DateTo ? params.DateTo : '' %>"></div>
+                <button type="submit" class="btn-export" style="background:#007bff;"><i class="bi bi-search"></i> Run</button>
+                <button type="button" class="btn-export" style="background:#6c757d;" onclick="clearFilters()"><i class="bi bi-x-circle"></i> Clear Filters</button>
+            </form>
+        </div>
+
+        <% if (error) { %>
+        <div class="alert alert-danger no-print"><i class="bi bi-exclamation-triangle"></i> <%= error %></div>
+        <% } %>
+
+        <% if (data && data.length > 0) { %>
+        <div style="overflow-x: auto;">
+            <%
+                var grouped = {};
+                var grandQty = 0, grandAmt = 0, grandPaid = 0, grandSurcharge = 0, grandDiscount = 0, grandTax = 0;
+
+                data.forEach(function(row) {
+                    if (parseFloat(row.Quantity) === 0) return;
+                    var cs = row.CashServer || 'Unknown';
+                    var cat = row.ReportCategory || 'Uncategorized';
+                    if (!grouped[cs]) grouped[cs] = {};
+                    if (!grouped[cs][cat]) grouped[cs][cat] = [];
+                    grouped[cs][cat].push(row);
+                    grandQty += parseFloat(row.Quantity) || 0;
+                    grandAmt += parseFloat(row.Amount) || 0;
+                    grandPaid += parseFloat(row.PaidAmount) || 0;
+                    grandSurcharge += parseFloat(row.Surcharge5Pct) || 0;
+                    grandDiscount += parseFloat(row.DiscountSum) || 0;
+                    grandTax += parseFloat(row.TaxSVC) || 0;
+                });
+            %>
+            <table class="report-table" id="reportTable">
+                <thead>
+                    <tr>
+                        <td class="iscs7" colspan="10" style="font-size:14px;font-weight:bold;">&nbsp; <%= report.name %></td>
+                    </tr>
+                    <tr>
+                        <td class="iscs1">&nbsp;Cash server&nbsp;</td>
+                        <td class="iscs1">&nbsp;Report Category&nbsp;</td>
+                        <td class="iscs1">&nbsp;Dish&nbsp;</td>
+                        <td class="iscs6">Quantity</td>
+                        <td class="iscs6">Avg Price</td>
+                        <td class="iscs6">Amount</td>
+                        <td class="iscs6">Discount Sum</td>
+                        <td class="iscs6">Paid Amount</td>
+                        <td class="iscs6">Tax 'SVC'-Amount</td>
+                        <td class="iscs6">SURCHARGE 5%'</td>
+                    </tr>
+                    <tr class="filter-row no-print">
+                        <td><select id="f_cs" onchange="filterTable()"><option value="">All</option>
+                            <% if (filterOpts && filterOpts.cashServers) { filterOpts.cashServers.forEach(function(v) { %><option value="<%= v %>"><%= v %></option><% }); } %>
+                        </select></td>
+                        <td><select id="f_cat" onchange="filterTable()"><option value="">All</option>
+                            <% if (filterOpts && filterOpts.categories) { filterOpts.categories.forEach(function(v) { %><option value="<%= v %>"><%= v %></option><% }); } %>
+                        </select></td>
+                        <td><select id="f_dish" onchange="filterTable()"><option value="">All</option>
+                            <% if (filterOpts && filterOpts.dishes) { filterOpts.dishes.forEach(function(v) { %><option value="<%= v %>"><%= v %></option><% }); } %>
+                        </select></td>
+                        <td><select id="f_qty" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">=5">&ge; 5</option><option value=">=10">&ge; 10</option><option value=">=20">&ge; 20</option></select></td>
+                        <td><select id="f_avg" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">5">&gt; 5</option><option value=">10">&gt; 10</option><option value=">20">&gt; 20</option></select></td>
+                        <td><select id="f_amt" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">10">&gt; 10</option><option value=">50">&gt; 50</option><option value=">100">&gt; 100</option></select></td>
+                        <td><select id="f_disc" onchange="filterTable()"><option value="">All</option><option value="!=0">&ne; 0</option></select></td>
+                        <td><select id="f_paid" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">10">&gt; 10</option><option value=">50">&gt; 50</option><option value=">100">&gt; 100</option></select></td>
+                        <td><select id="f_tax" onchange="filterTable()"><option value="">All</option><option value="!=0">&ne; 0</option></select></td>
+                        <td><select id="f_sc" onchange="filterTable()"><option value="">All</option><option value=">0">&gt; 0</option><option value=">5">&gt; 5</option></select></td>
+                    </tr>
+                </thead>
+                <tbody>
+                <%
+                    var serverKeys = Object.keys(grouped).sort();
+                    for (var si = 0; si < serverKeys.length; si++) {
+                        var cs = serverKeys[si];
+                        var cats = grouped[cs];
+                        var catKeys = Object.keys(cats).sort();
+
+                        // count total rows for this server
+                        var csTotalRows = 0;
+                        for (var ci = 0; ci < catKeys.length; ci++) {
+                            csTotalRows += cats[catKeys[ci]].length + 1;
+                        }
+
+                        var csRowNum = 0;
+                        for (var ci = 0; ci < catKeys.length; ci++) {
+                            var cat = catKeys[ci];
+                            var items = cats[cat];
+                            var catQty = 0, catAmt = 0, catPaid = 0, catSurcharge = 0, catDiscount = 0, catTax = 0;
+
+                            for (var ii = 0; ii < items.length; ii++) {
+                                var row = items[ii];
+                                catQty += parseFloat(row.Quantity) || 0;
+                                catAmt += parseFloat(row.Amount) || 0;
+                                catPaid += parseFloat(row.PaidAmount) || 0;
+                                catSurcharge += parseFloat(row.Surcharge5Pct) || 0;
+                                catDiscount += parseFloat(row.DiscountSum) || 0;
+                                catTax += parseFloat(row.TaxSVC) || 0;
+                %>
+                    <tr data-cs="<%= cs %>" data-cat="<%= cat %>" data-dish="<%= row.Dish %>"
+                        data-qty="<%= row.Quantity %>" data-avg="<%= row.AvgPrice %>" data-amt="<%= row.Amount %>"
+                        data-disc="<%= row.DiscountSum %>" data-paid="<%= row.PaidAmount %>"
+                        data-tax="<%= row.TaxSVC %>" data-sc="<%= row.Surcharge5Pct %>">
+                        <% if (csRowNum === 0 && ci === 0) { %><td class="iscs2" rowspan="<%= csTotalRows %>">&nbsp;<%= cs %>&nbsp;</td><% } %>
+                        <% if (ii === 0) { %><td class="iscs2" rowspan="<%= items.length + 1 %>">&nbsp;<%= cat %>&nbsp;</td><% } %>
+                        <td class="iscs2">&nbsp;<%= row.Dish %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= parseFloat(row.Quantity).toFixed(3) %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= parseFloat(row.AvgPrice).toFixed(2) %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= parseFloat(row.Amount).toFixed(2) %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= parseFloat(row.DiscountSum).toFixed(2) %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= parseFloat(row.PaidAmount).toFixed(2) %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= parseFloat(row.TaxSVC).toFixed(2) %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= parseFloat(row.Surcharge5Pct).toFixed(2) %>&nbsp;</td>
+                    </tr>
+                <%
+                                csRowNum++;
+                            }
+                %>
+                    <tr class="cat-subtotal" style="background:#F0F0F0;" data-cat="<%= cat %>">
+                        <td class="iscs4" colspan="2">&nbsp;<%= cat %> total&nbsp;</td>
+                        <td class="iscs4">&nbsp;<%= catQty.toFixed(3) %>&nbsp;</td>
+                        <td class="iscs4">&nbsp;<%= catAmt > 0 ? (catAmt / catQty).toFixed(2) : '0.00' %>&nbsp;</td>
+                        <td class="iscs4">&nbsp;<%= catAmt.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs4">&nbsp;<%= catDiscount.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs4">&nbsp;<%= catPaid.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs4">&nbsp;<%= catTax.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs4">&nbsp;<%= catSurcharge.toFixed(2) %>&nbsp;</td>
+                    </tr>
+                <%
+                            csRowNum++;
+                        }
+                    }
+                %>
+                    <tr id="grandTotalRow">
+                        <td class="iscs9" colspan="3">&nbsp;Grand Total&nbsp;</td>
+                        <td class="iscs9">&nbsp;<%= grandQty.toFixed(3) %>&nbsp;</td>
+                        <td class="iscs9">&nbsp;<%= grandQty > 0 ? (grandAmt / grandQty).toFixed(2) : '0.00' %>&nbsp;</td>
+                        <td class="iscs9">&nbsp;<%= grandAmt.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs9">&nbsp;<%= grandDiscount.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs9">&nbsp;<%= grandPaid.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs9">&nbsp;<%= grandTax.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs9">&nbsp;<%= grandSurcharge.toFixed(2) %>&nbsp;</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-2 mb-4 no-print">
+            <small class="text-muted">
+                <i class="bi bi-info-circle"></i>
+                Showing <span id="visibleCount"><%= data.filter(function(r){return parseFloat(r.Quantity)>0}).length %></span> items | Generated: <%= new Date().toLocaleString() %>
+            </small>
+        </div>
+        <% } else if (!error) { %>
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+            <p class="mt-2">No data found. Please select a date range and click Run.</p>
+        </div>
+        <% } %>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function parseCompare(val, input) {
+            input = input.trim();
+            if (!input) return true;
+            var num = parseFloat(val);
+            if (input.indexOf('>=') === 0) return num >= parseFloat(input.slice(2));
+            if (input.indexOf('<=') === 0) return num <= parseFloat(input.slice(2));
+            if (input.indexOf('>') === 0) return num > parseFloat(input.slice(1));
+            if (input.indexOf('<') === 0) return num < parseFloat(input.slice(1));
+            if (input.indexOf('!=') === 0 || input.indexOf('<>') === 0) return num !== parseFloat(input.slice(2));
+            if (input.indexOf('=') === 0) return num === parseFloat(input.slice(1));
+            return val.toString().toLowerCase().indexOf(input.toLowerCase()) !== -1;
+        }
+
+        function filterTable() {
+            var fcs = document.getElementById('f_cs').value;
+            var fcat = document.getElementById('f_cat').value;
+            var fdish = document.getElementById('f_dish').value;
+            var fqty = document.getElementById('f_qty').value;
+            var favg = document.getElementById('f_avg').value;
+            var famt = document.getElementById('f_amt').value;
+            var fdisc = document.getElementById('f_disc').value;
+            var fpaid = document.getElementById('f_paid').value;
+            var ftax = document.getElementById('f_tax').value;
+            var fsc = document.getElementById('f_sc').value;
+
+            var hasFilter = fcs || fcat || fdish || fqty || favg || famt || fdisc || fpaid || ftax || fsc;
+            var rows = document.querySelectorAll('#reportTable tbody tr[data-cs]');
+            var visibleRows = [];
+            var visibleCats = {};
+
+            rows.forEach(function(row) {
+                var show = true;
+                if (hasFilter) {
+                    if (fcs && row.dataset.cs.toLowerCase().indexOf(fcs.toLowerCase()) === -1) show = false;
+                    if (fcat && row.dataset.cat.toLowerCase().indexOf(fcat.toLowerCase()) === -1) show = false;
+                    if (fdish && row.dataset.dish.toLowerCase().indexOf(fdish.toLowerCase()) === -1) show = false;
+                    if (fqty && !parseCompare(row.dataset.qty, fqty)) show = false;
+                    if (favg && !parseCompare(row.dataset.avg, favg)) show = false;
+                    if (famt && !parseCompare(row.dataset.amt, famt)) show = false;
+                    if (fdisc && !parseCompare(row.dataset.disc, fdisc)) show = false;
+                    if (fpaid && !parseCompare(row.dataset.paid, fpaid)) show = false;
+                    if (ftax && !parseCompare(row.dataset.tax, ftax)) show = false;
+                    if (fsc && !parseCompare(row.dataset.sc, fsc)) show = false;
+                }
+                row.style.display = show ? '' : 'none';
+                if (show) { visibleRows.push(row); visibleCats[row.dataset.cat] = true; }
+            });
+
+            document.querySelectorAll('.cat-subtotal').forEach(function(st) {
+                st.style.display = visibleCats[st.dataset.cat] ? '' : 'none';
+            });
+
+            document.getElementById('visibleCount').textContent = visibleRows.length;
+
+            var grandRow = document.getElementById('grandTotalRow');
+            if (grandRow) {
+                var gQty = 0, gAmt = 0, gPaid = 0, gSurcharge = 0, gDiscount = 0, gTax = 0;
+                visibleRows.forEach(function(r) {
+                    gQty += parseFloat(r.dataset.qty) || 0;
+                    gAmt += parseFloat(r.dataset.amt) || 0;
+                    gPaid += parseFloat(r.dataset.paid) || 0;
+                    gSurcharge += parseFloat(r.dataset.sc) || 0;
+                    gDiscount += parseFloat(r.dataset.disc) || 0;
+                    gTax += parseFloat(r.dataset.tax) || 0;
+                });
+                var cells = grandRow.querySelectorAll('td');
+                if (cells.length >= 9) {
+                    cells[1].textContent = gQty.toFixed(3);
+                    cells[2].textContent = gQty > 0 ? (gAmt / gQty).toFixed(2) : '0.00';
+                    cells[3].textContent = gAmt.toFixed(2);
+                    cells[4].textContent = gDiscount.toFixed(2);
+                    cells[5].textContent = gPaid.toFixed(2);
+                    cells[6].textContent = gTax.toFixed(2);
+                    cells[7].textContent = gSurcharge.toFixed(2);
+                }
+            }
+        }
+
+        function exportCSV() {
+            var table = document.getElementById('reportTable');
+            if (!table) return;
+            var csv = [];
+            table.querySelectorAll('tr').forEach(function(row) {
+                if (row.style.display === 'none' || row.classList.contains('filter-row')) return;
+                var rowData = [];
+                row.querySelectorAll('td, th').forEach(function(col) {
+                    rowData.push('"' + col.innerText.trim().replace(/"/g, '""') + '"');
+                });
+                csv.push(rowData.join(','));
+            });
+            var blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            var link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'dish-sale-report-' + new Date().toISOString().slice(0,10) + '.csv';
+            link.click();
+        }
+
+        function clearFilters() {
+            ['f_cs','f_cat','f_dish','f_qty','f_avg','f_amt','f_disc','f_paid','f_tax','f_sc'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            filterTable();
+        }
+
+        document.getElementById('filterForm').addEventListener('submit', function(e) {
+            var from = document.getElementById('DateFrom').value;
+            var to = document.getElementById('DateTo').value;
+            if (!from || !to) {
+                e.preventDefault();
+                alert('Please select both From and To dates.');
+            }
+        });
+    </script>
+</body>
+</html>

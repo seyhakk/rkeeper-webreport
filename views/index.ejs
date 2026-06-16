@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body { background: #f0f2f5; }
+        .hero { background: linear-gradient(135deg, #1a237e, #0d47a1, #01579b); color: white; padding: 28px 0 32px; }
+        .stat-card { border: none; border-radius: 12px; transition: transform .15s; }
+        .stat-card:hover { transform: translateY(-3px); }
+        .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+        .chart-card { border: none; border-radius: 12px; }
+        .report-card { border: 1px solid #e0e0e0; border-radius: 10px; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+        .report-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,.1); border-color: #007bff; }
+        .report-link { text-decoration: none; color: inherit; }
+
+        @media (max-width: 576px) {
+            .hero h2 { font-size: 1.3rem; }
+            .stat-card .display-6 { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-0"><i class="bi bi-bar-chart-line"></i> <%= title %></h2>
+                    <small class="opacity-75">R-Keeper 7 Dashboard</small>
+                </div>
+                <div class="text-end small" id="dateRange"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container" style="margin-top:-20px;">
+        <div class="row g-3 mb-4" id="statCards"></div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-lg-8">
+                <div class="card chart-card h-100">
+                    <div class="card-header bg-white fw-semibold">Daily Sales Trend</div>
+                    <div class="card-body"><canvas id="dailyChart" height="220"></canvas></div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card chart-card h-100">
+                    <div class="card-header bg-white fw-semibold">Sales by Category</div>
+                    <div class="card-body"><canvas id="catChart" height="220"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-lg-6">
+                <div class="card chart-card h-100">
+                    <div class="card-header bg-white fw-semibold">Top 10 Dishes</div>
+                    <div class="card-body"><canvas id="dishChart" height="220"></canvas></div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card chart-card h-100">
+                    <div class="card-header bg-white fw-semibold">Hourly Check Distribution</div>
+                    <div class="card-body"><canvas id="hourChart" height="220"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <h5 class="fw-semibold mb-3"><i class="bi bi-file-earmark-text"></i> Reports</h5>
+        <div class="row g-3 mb-4">
+            <% reports.forEach(function(r) { %>
+            <div class="col-md-6 col-lg-4">
+                <a href="/report/<%= r.id %>" class="report-link">
+                    <div class="card report-card h-100">
+                        <div class="card-body d-flex flex-column">
+                            <h5 class="card-title"><i class="<%= r.icon %>" style="font-size:1.8rem;"></i></h5>
+                            <h6 class="card-subtitle mb-1"><%= r.name %></h6>
+                            <p class="card-text text-muted small mb-0"><%= r.description %></p>
+                            <div class="mt-auto pt-2"><span class="badge bg-primary">Open</span></div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <% }); %>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function fmt(n) { return '$' + parseFloat(n || 0).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2}); }
+        function fmtInt(n) { return parseInt(n || 0).toLocaleString(); }
+
+        fetch('/api/dashboard')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                var s = d.summary;
+                document.getElementById('dateRange').textContent = d.dates.from + ' \u2013 ' + d.dates.to;
+                document.getElementById('statCards').innerHTML = [
+                    { icon: 'bi-cash-stack', color: '#198754', label: 'Total Sales', val: fmt(s.sales) },
+                    { icon: 'bi-receipt', color: '#0d6efd', label: 'Total Checks', val: fmtInt(s.checks) },
+                    { icon: 'bi-people', color: '#6f42c1', label: 'Total Guests', val: fmtInt(s.guests) },
+                    { icon: 'bi-calculator', color: '#fd7e14', label: 'Avg Check', val: fmt(s.avgCheck) }
+                ].map(function(c) {
+                    return '<div class="col-md-3 col-6"><div class="card stat-card h-100"><div class="card-body d-flex align-items-center gap-3"><div class="stat-icon text-white" style="background:'+c.color+'"><i class="bi '+c.icon+'"></i></div><div><div class="text-muted small">'+c.label+'</div><div class="fw-bold fs-5">'+c.val+'</div></div></div></div></div>';
+                }).join('');
+
+                // Daily sales chart
+                new Chart(document.getElementById('dailyChart'), {
+                    type: 'line',
+                    data: {
+                        labels: d.daily.map(function(r) { return r.d ? r.d.slice(0,10) : ''; }),
+                        datasets: [{
+                            label: 'Sales',
+                            data: d.daily.map(function(r) { return r.sales; }),
+                            borderColor: '#0d6efd',
+                            backgroundColor: 'rgba(13,110,253,.1)',
+                            fill: true,
+                            tension: .3
+                        }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, ticks: { callback: function(v) { return '$' + v; } } } } }
+                });
+
+                // Category pie
+                new Chart(document.getElementById('catChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: d.categories.map(function(r) { return r.name; }),
+                        datasets: [{ data: d.categories.map(function(r) { return r.sales; }) }]
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
+                });
+
+                // Top dishes horizontal bar
+                new Chart(document.getElementById('dishChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: d.topDishes.map(function(r) { return r.name.length > 30 ? r.name.slice(0,27)+'...' : r.name; }).reverse(),
+                        datasets: [{ data: d.topDishes.map(function(r) { return r.sales; }).reverse(), backgroundColor: '#198754' }]
+                    },
+                    options: {
+                        responsive: true, indexAxis: 'y',
+                        plugins: { legend: { display: false } },
+                        scales: { x: { ticks: { callback: function(v) { return '$' + v; } } } }
+                    }
+                });
+
+                // Hourly bar
+                new Chart(document.getElementById('hourChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: d.hourly.map(function(r) { return r.h.toString().padStart(2,'0')+':00'; }),
+                        datasets: [{ data: d.hourly.map(function(r) { return r.checks; }), backgroundColor: '#6f42c1' }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } } }
+                });
+            })
+            .catch(function(e) { document.getElementById('statCards').innerHTML = '<div class="col"><div class="alert alert-danger">Failed to load dashboard data</div></div>'; });
+    </script>
+</body>
+</html>

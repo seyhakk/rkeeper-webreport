@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= report.name %> - <%= title %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .iscs0 { background: #FFFFFF; color: #000000; font: normal normal 12px/1.4 Arial, sans-serif; }
+        .iscs1 { background: #C6D3EF; color: #000000; font: bold 12px/1.4 Arial, sans-serif; text-align: left; }
+        .iscs2 { background: #FFFFFF; color: #000000; text-align: left; }
+        .iscs3 { background: #FFFFFF; color: #000000; text-align: right; }
+        .iscs4 { background: #F0F0F0; color: #000000; font: bold 12px/1.4 Arial, sans-serif; text-align: right; }
+        .iscs5 { background: #E0E0E0; color: #000000; font: bold 13px/1.4 Arial, sans-serif; text-align: right; }
+        .iscs6 { background: #FFFFFF; color: #000000; font: bold 12px/1.4 Arial, sans-serif; text-align: left; }
+        .iscs7 { background: #FFFFFF; color: #000000; text-align: left; }
+        .iscs9 { background: #D9E2F3; color: #000; font: bold 13px/1.4 Arial, sans-serif; text-align: right; }
+
+        .report-table { border-collapse: collapse; border: 1px solid #000; }
+        .report-table td { border: 1px solid #888; padding: 3px 6px; white-space: nowrap; font-size: 12px; }
+
+        .btn-export { background: #28a745; color: white; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .btn-export:hover { background: #218838; color: white; }
+
+        .filter-bar { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; }
+        .filter-bar input[type="date"] { border: 1px solid #ccc; border-radius: 4px; padding: 4px 8px; font-size: 13px; }
+        .filter-bar label { font-size: 13px; font-weight: 600; margin-right: 4px; }
+
+        @media print { .no-print { display: none !important; } }
+        @media (max-width: 768px) { .report-table td { padding: 2px 4px; font-size: 11px; } }
+    </style>
+</head>
+<body class="iscs0">
+    <nav class="navbar navbar-dark bg-dark no-print">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/"><i class="bi bi-bar-chart-line"></i> <%= title %></a>
+            <div class="d-flex gap-2">
+                <button class="btn-export" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+                <button class="btn-export" onclick="exportCSV()"><i class="bi bi-filetype-csv"></i> CSV</button>
+                <a href="/" class="btn-export" style="background:#6c757d;text-decoration:none;"><i class="bi bi-arrow-left"></i> Back</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-3 px-3">
+        <div class="d-flex justify-content-between align-items-center mb-2 no-print">
+            <div>
+                <h5 class="mb-0"><i class="bi bi-currency-exchange text-info"></i> <%= report.name %></h5>
+                <small class="text-muted"><%= report.description %></small>
+            </div>
+        </div>
+
+        <div class="filter-bar no-print">
+            <form method="POST" action="/report/<%= report.id %>" id="filterForm" class="d-flex align-items-center gap-3 flex-wrap">
+                <div><label>From:</label><input type="date" name="DateFrom" id="DateFrom" value="<%= params && params.DateFrom ? params.DateFrom : '' %>"></div>
+                <div><label>To:</label><input type="date" name="DateTo" id="DateTo" value="<%= params && params.DateTo ? params.DateTo : '' %>"></div>
+                <button type="submit" class="btn-export" style="background:#007bff;"><i class="bi bi-search"></i> Run</button>
+            </form>
+        </div>
+
+        <% if (error) { %>
+        <div class="alert alert-danger no-print"><i class="bi bi-exclamation-triangle"></i> <%= error %></div>
+        <% } %>
+
+        <% if (data && data.length > 0) { %>
+        <div style="overflow-x: auto;">
+            <%
+                var restGroup = {};
+                var grandLines = 0, grandAmt = 0, grandDiscount = 0, grandPaid = 0, grandSurcharge = 0;
+
+                data.forEach(function(row) {
+                    var r = row.Restaurant || 'Unknown';
+                    var d = row.SaleDate;
+                    var dt;
+                    if (d) { var dd = new Date(d); dt = (dd.getMonth()+1)+'/'+dd.getDate()+'/'+dd.getFullYear(); } else { dt = 'Unknown'; }
+                    var ct = row.CurrencyType || 'Unknown';
+                    var c = row.Currency || 'Unknown';
+
+                    if (!restGroup[r]) restGroup[r] = {};
+                    if (!restGroup[r][dt]) restGroup[r][dt] = {};
+                    if (!restGroup[r][dt][ct]) restGroup[r][dt][ct] = [];
+                    restGroup[r][dt][ct].push(row);
+
+                    grandLines += parseInt(row.LineCount) || 0;
+                    grandAmt += parseFloat(row.Amount) || 0;
+                    grandDiscount += parseFloat(row.DiscountSum) || 0;
+                    grandPaid += parseFloat(row.PaidAmount) || 0;
+                    grandSurcharge += parseFloat(row.Surcharge5Pct) || 0;
+                });
+            %>
+            <table class="report-table" id="reportTable">
+                <thead>
+                    <tr><td class="iscs7" colspan="10" style="font-size:14px;font-weight:bold;">&nbsp; <%= report.name %></td></tr>
+                    <tr>
+                        <td class="iscs1">&nbsp;Restaurant Name&nbsp;</td>
+                        <td class="iscs1">&nbsp;Real Date&nbsp;</td>
+                        <td class="iscs1">&nbsp;Currency Type&nbsp;</td>
+                        <td class="iscs1">&nbsp;Currency&nbsp;</td>
+                        <td class="iscs6">Quantity</td>
+                        <td class="iscs6">Avg Price</td>
+                        <td class="iscs6">Amount</td>
+                        <td class="iscs6">Discount Sum</td>
+                        <td class="iscs6">Paid Amount</td>
+                        <td class="iscs6">SURCHARGE 5%'</td>
+                    </tr>
+                </thead>
+                <tbody>
+                <%
+                    var restKeys = Object.keys(restGroup).sort();
+                    for (var ri = 0; ri < restKeys.length; ri++) {
+                        var rest = restKeys[ri];
+                        var dates = restGroup[rest];
+                        var dateKeys = Object.keys(dates).sort();
+
+                        // Count total rows for restaurant
+                        var restRowCount = 0;
+                        for (var di = 0; di < dateKeys.length; di++) {
+                            var types = dates[dateKeys[di]];
+                            var typeKeys = Object.keys(types).sort();
+                            for (var ti = 0; ti < typeKeys.length; ti++) {
+                                restRowCount += types[typeKeys[ti]].length;
+                            }
+                        }
+
+                        var restRowNum = 0;
+                        for (var di = 0; di < dateKeys.length; di++) {
+                            var dt = dateKeys[di];
+                            var types = dates[dt];
+                            var typeKeys = Object.keys(types).sort();
+
+                            // Count rows for this date
+                            var dateRowCount = 0;
+                            for (var ti = 0; ti < typeKeys.length; ti++) {
+                                dateRowCount += types[typeKeys[ti]].length;
+                            }
+
+                            var dateRowNum = 0;
+                            for (var ti = 0; ti < typeKeys.length; ti++) {
+                                var ct = typeKeys[ti];
+                                var currencies = types[ct];
+                                var ctRowCount = currencies.length;
+
+                                var ctRowNum = 0;
+                                var ctLines = 0, ctAmt = 0, ctDiscount = 0, ctPaid = 0, ctSurcharge = 0;
+
+                                for (var ci = 0; ci < currencies.length; ci++) {
+                                    var row = currencies[ci];
+                                    ctLines += parseInt(row.LineCount) || 0;
+                                    ctAmt += parseFloat(row.Amount) || 0;
+                                    ctDiscount += parseFloat(row.DiscountSum) || 0;
+                                    ctPaid += parseFloat(row.PaidAmount) || 0;
+                                    ctSurcharge += parseFloat(row.Surcharge5Pct) || 0;
+
+                                    var qty = parseInt(row.LineCount) || 0;
+                                    var amt = parseFloat(row.Amount) || 0;
+                                    var disc = parseFloat(row.DiscountSum) || 0;
+                                    var paid = parseFloat(row.PaidAmount) || 0;
+                                    var sc = parseFloat(row.Surcharge5Pct) || 0;
+                %>
+                    <tr>
+                        <% if (restRowNum === 0) { %><td class="iscs2" rowspan="<%= restRowCount %>">&nbsp;<%= rest %>&nbsp;</td><% } %>
+                        <% if (dateRowNum === 0) { %><td class="iscs2" rowspan="<%= dateRowCount %>">&nbsp;<%= dt %>&nbsp;</td><% } %>
+                        <% if (ctRowNum === 0) { %><td class="iscs2" rowspan="<%= ctRowCount %>">&nbsp;<%= ct %>&nbsp;</td><% } %>
+                        <td class="iscs2">&nbsp;<%= row.Currency %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= qty.toFixed(3) %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= qty > 0 ? (amt/qty).toFixed(2) : '0.00' %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= amt.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= disc.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= paid.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs3">&nbsp;<%= sc.toFixed(2) %>&nbsp;</td>
+                    </tr>
+                <%
+                                    restRowNum++; dateRowNum++; ctRowNum++;
+                                }
+                            }
+                        }
+                    }
+                %>
+                    <tr>
+                        <td class="iscs5" colspan="4">&nbsp;Totals&nbsp;</td>
+                        <td class="iscs5">&nbsp;<%= grandLines.toFixed(3) %>&nbsp;</td>
+                        <td class="iscs5">&nbsp;<%= grandLines > 0 ? (grandAmt/grandLines).toFixed(2) : '0.00' %>&nbsp;</td>
+                        <td class="iscs5">&nbsp;<%= grandAmt.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs5">&nbsp;<%= grandDiscount.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs5">&nbsp;<%= grandPaid.toFixed(2) %>&nbsp;</td>
+                        <td class="iscs5">&nbsp;<%= grandSurcharge.toFixed(2) %>&nbsp;</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-2 mb-4 no-print">
+            <small class="text-muted">
+                <i class="bi bi-info-circle"></i>
+                Showing <%= data.length %> currency groups | Generated: <%= new Date().toLocaleString() %>
+            </small>
+        </div>
+        <% } else if (!error) { %>
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+            <p class="mt-2">No data found. Select a date range and click Run.</p>
+        </div>
+        <% } %>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function exportCSV() {
+            var table = document.getElementById('reportTable');
+            if (!table) return;
+            var csv = [];
+            table.querySelectorAll('tr').forEach(function(row) {
+                var rowData = [];
+                row.querySelectorAll('td, th').forEach(function(col) {
+                    rowData.push('"' + col.innerText.trim().replace(/"/g, '""') + '"');
+                });
+                csv.push(rowData.join(','));
+            });
+            var blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            var link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'currency-sales-' + new Date().toISOString().slice(0,10) + '.csv';
+            link.click();
+        }
+        document.getElementById('filterForm').addEventListener('submit', function(e) {
+            if (!document.getElementById('DateFrom').value || !document.getElementById('DateTo').value) {
+                e.preventDefault();
+                alert('Please select both From and To dates.');
+            }
+        });
+    </script>
+</body>
+</html>

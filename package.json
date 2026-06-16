@@ -1,0 +1,14 @@
+{
+  "name": "rkeeper-webreport",
+  "version": "1.0.0",
+  "description": "R-Keeper 7 Centralized Web Reports",
+  "scripts": {
+    "dev": "node api/index.js",
+    "start": "node api/index.js"
+  },
+  "dependencies": {
+    "ejs": "^3.1.9",
+    "express": "^4.18.2",
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}
