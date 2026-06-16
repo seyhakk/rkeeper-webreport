@@ -341,7 +341,7 @@ class AgentApp:
             for r in rows:
                 row = {}
                 for k, v in r.items():
-                    if isinstance(v, datetime):
+                    if isinstance(v, (datetime.date,)):
                         row[k] = v.isoformat()
                     elif hasattr(v, '__float__'):
                         row[k] = float(v)
@@ -349,10 +349,23 @@ class AgentApp:
                         row[k] = v
                 data.append(row)
             self._log(f"  Fetched {len(data)} rows, pushing to cloud...")
-            api_request("POST", f"{api_url}/api/agent/{api_key}/push", {
-                "job_id": job_id, "report_id": report_id,
-                "date_from": date_from, "date_to": date_to, "data": data
-            })
+
+            # Chunk large payloads to avoid 413
+            chunk_size = 200
+            total_rows = len(data)
+            for i in range(0, total_rows, chunk_size):
+                chunk = data[i:i+chunk_size]
+                is_last = (i + chunk_size) >= total_rows
+                push_data = {
+                    "job_id": job_id, "report_id": report_id,
+                    "date_from": date_from, "date_to": date_to,
+                    "data": chunk
+                }
+                if not is_last:
+                    push_data["_more"] = True
+                api_request("POST", f"{api_url}/api/agent/{api_key}/push", push_data)
+                self._log(f"  Pushed chunk {i//chunk_size+1} ({len(chunk)} rows)")
+
             self._log(f"  Completed!")
         except Exception as e:
             self._log(f"  Error: {e}")

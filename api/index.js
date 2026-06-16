@@ -231,21 +231,38 @@ app.post('/api/agent/:apiKey/push', async (req, res) => {
   const { data: restaurant } = await supabase.from('restaurants').select('*').eq('api_key', req.params.apiKey).single();
   if (!restaurant) return res.status(401).json({ error: 'Invalid API key' });
 
-  const { job_id, data, error: errMsg } = req.body;
+  const { job_id, data, error: errMsg, _more } = req.body;
 
   if (errMsg) {
     await supabase.from('sync_jobs').update({ status: 'failed', error: errMsg, completed_at: new Date().toISOString() }).eq('id', job_id);
     return res.json({ status: 'failed' });
   }
 
-  await supabase.from('sync_jobs').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', job_id);
-  await supabase.from('sync_results').insert({
-    job_id, restaurant_id: restaurant.id, report_id: req.body.report_id,
-    date_from: req.body.date_from, date_to: req.body.date_to,
-    data: data, columns: req.body.columns || null
-  });
+  // Chunked push: append to existing data or create new
+  const existing = await supabase.from('sync_results').select('data').eq('job_id', job_id).single();
+  let merged = data;
+  if (existing.data && existing.data.length) {
+    merged = existing.data.concat(data);
+  }
 
-  res.json({ status: 'completed' });
+  if (_more) {
+    // Save accumulated data, keep job running
+    await supabase.from('sync_results').upsert({
+      job_id, restaurant_id: restaurant.id, report_id: req.body.report_id,
+      date_from: req.body.date_from, date_to: req.body.date_to,
+      data: merged, columns: req.body.columns || null
+    }, { onConflict: 'job_id' });
+    res.json({ status: 'partial', rows: merged.length });
+  } else {
+    // Final chunk: save and mark completed
+    await supabase.from('sync_jobs').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', job_id);
+    await supabase.from('sync_results').upsert({
+      job_id, restaurant_id: restaurant.id, report_id: req.body.report_id,
+      date_from: req.body.date_from, date_to: req.body.date_to,
+      data: merged, columns: req.body.columns || null
+    }, { onConflict: 'job_id' });
+    res.json({ status: 'completed' });
+  }
 });
 
 // Agent: claim a job (set to running)
