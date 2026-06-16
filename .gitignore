@@ -12,3 +12,7 @@ agent/Agent.exe
 agent/_agent-bundled.js
 agent/_sea-prep.blob
 agent/_sea-config.json
+
+agent-gui/dist/
+agent-gui/build/
+agent-gui/*.spec
