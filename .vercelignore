@@ -1,0 +1,4 @@
+agent-gui
+agent/build
+agent/node_modules
+supabase/.temp
