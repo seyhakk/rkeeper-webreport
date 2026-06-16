@@ -78,7 +78,7 @@
         <div class="row g-3 mb-4">
             <% reports.forEach(function(r) { %>
             <div class="col-md-6 col-lg-4">
-                <a href="/report/<%= r.id %>" class="report-link">
+                <a href="/r/<%= slug %>/<%= r.id %>" class="report-link">
                     <div class="card report-card h-100">
                         <div class="card-body d-flex flex-column">
                             <h5 class="card-title"><i class="<%= r.icon %>" style="font-size:1.8rem;"></i></h5>
@@ -164,7 +164,13 @@
                     options: { responsive: true, plugins: { legend: { display: false } } }
                 });
             })
-            .catch(function(e) { document.getElementById('statCards').innerHTML = '<div class="col"><div class="alert alert-danger">Failed to load dashboard data</div></div>'; });
+            .catch(function(e) {
+              document.getElementById('statCards').innerHTML = '<div class="col"><div class="text-muted text-center py-4">Dashboard data not available yet.<br>Run a report to populate data.</div></div>';
+              document.getElementById('dailyChart').parentElement.parentElement.style.display = 'none';
+              document.getElementById('catChart').parentElement.parentElement.style.display = 'none';
+              document.getElementById('dishChart').parentElement.parentElement.style.display = 'none';
+              document.getElementById('hourChart').parentElement.parentElement.style.display = 'none';
+            });
     </script>
 </body>
 </html>

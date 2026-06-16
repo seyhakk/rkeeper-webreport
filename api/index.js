@@ -115,7 +115,7 @@ app.get('/r', async (req, res) => {
 app.get('/r/:slug', async (req, res) => {
   const restaurant = await getRestaurant(req.params.slug);
   if (!restaurant) return res.status(404).send('Restaurant not found');
-  res.render('index', { title: restaurant.name + ' - Reports', reports: reports, restaurants: null });
+  res.render('index', { title: restaurant.name + ' - Reports', reports: reports, slug: req.params.slug, restaurants: null });
 });
 
 app.get('/r/:slug/:reportId', async (req, res) => {

@@ -3,7 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const readline = require('readline');
 
-const configPath = path.join(__dirname, 'config.json');
+// In SEA .exe, __dirname is a temp dir. Always use the exe's folder.
+const EXE_DIR = path.dirname(process.execPath);
+const CONFIG_PATH = path.join(EXE_DIR, 'config.json');
 
 async function runSetup() {
   console.log('\n=== R-Keeper Report Agent Setup ===\n');
@@ -42,21 +44,40 @@ async function runSetup() {
     console.error('  API FAILED: ' + e.message);
     if ((await ask('Save config anyway? (y/N): ')).toLowerCase() !== 'y') { rl.close(); process.exit(1); }
   }
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-  console.log('\nConfig saved to: ' + configPath);
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+  console.log('\n  Config saved to: ' + CONFIG_PATH);
   rl.close();
   return config;
 }
 
+function pause(msg) {
+  // When double-clicked, show message before closing
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(r => rl.question(msg || '\n  Press Enter to exit...', () => { rl.close(); r(); }));
+}
+
 async function getConfig() {
-  if (fs.existsSync(configPath)) return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  console.log('config.json not found.');
-  const create = process.argv.includes('--setup') ? true : await new Promise(r => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question('Run setup wizard? (Y/n): ', a => { rl.close(); r(a.toLowerCase() !== 'n'); });
-  });
-  if (create) return await runSetup();
-  console.error('Create config.json manually, then run again.');
+  if (fs.existsSync(CONFIG_PATH)) return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+
+  const hasArgs = process.argv.length > 2; // running from cmd with flags
+  console.log('');
+  console.log('  config.json not found at:');
+  console.log('  ' + CONFIG_PATH);
+  console.log('');
+
+  if (process.argv.includes('--setup')) {
+    return await runSetup();
+  }
+
+  // If no command-line args, this was likely double-clicked — run setup directly
+  if (!hasArgs) {
+    console.log('  Launching setup wizard...');
+    console.log('');
+    return await runSetup();
+  }
+
+  console.error('  Create config.json next to Agent.exe, then run again.');
+  await pause();
   process.exit(1);
 }
 
@@ -158,4 +179,8 @@ async function main() {
   }
 }
 
-main().catch(function(err) { console.error('FATAL: ' + err.message); process.exit(1); });
+main().catch(function(err) {
+  console.error('FATAL: ' + err.message);
+  if (process.argv.length <= 2) { /* double-clicked */ const rl = readline.createInterface({input:process.stdin,output:process.stdout}); rl.question('\nPress Enter to exit...', () => { rl.close(); process.exit(1); }); }
+  else process.exit(1);
+});

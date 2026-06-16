@@ -1,9 +1,14 @@
 node_modules/
 .env
-agent/config.json
-agent/node_modules/
-agent/Agent.exe
+*.log
 
 .vercel
 supabase/.temp/
 *.bak
+
+agent/config.json
+agent/node_modules/
+agent/Agent.exe
+agent/_agent-bundled.js
+agent/_sea-prep.blob
+agent/_sea-config.json
