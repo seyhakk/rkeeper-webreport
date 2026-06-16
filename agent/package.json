@@ -10,11 +10,14 @@
     "build": "pkg agent.js --targets node18-win-x64 -o Agent.exe",
     "build-test": "pkg agent.js --targets node18-win-x64 -o Agent.exe && node test-Agent.exe --test"
   },
+  "bin": "agent.js",
   "pkg": {
-    "assets": ["config.json"]
+    "assets": [
+      "config.json"
+    ]
   },
   "dependencies": {
-    "mssql": "^10.0.1"
+    "mssql": "^10.0.4"
   },
   "devDependencies": {
     "pkg": "^5.8.1"
