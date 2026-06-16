@@ -244,7 +244,7 @@
                     .then(function(j) {
                         if (j.status === 'completed' || j.status === 'no_data') {
                             clearInterval(timer);
-                            window.location.href = '/r/<%= slug %>/<%= report.id %>?job=' + jobId;
+                            window.location.href = '/r/<%= slug %>/<%= report.id %>?job=' + jobId + '&_=' + Date.now();
                         } else if (j.status === 'failed') {
                             clearInterval(timer);
                             alert('Error: ' + (j.error || 'Job failed'));

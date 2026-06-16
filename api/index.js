@@ -98,9 +98,9 @@ const reportTemplates = {
 // ============ MIDDLEWARE ============
 
 async function getRestaurant(slug) {
-  const { data, error } = await supabase.from('restaurants').select('*').eq('slug', slug).single();
-  if (error || !data) return null;
-  return data;
+  const { data, error } = await supabase.from('restaurants').select('*').eq('slug', slug);
+  if (error || !data || data.length === 0) return null;
+  return data[0];
 }
 
 // ============ ROUTES ============
@@ -130,7 +130,8 @@ app.get('/r/:slug/:reportId', async (req, res) => {
 
   // If ?job=jobId is set, try to load result data
   if (req.query.job) {
-    const { data: result } = await supabase.from('sync_results').select('*').eq('job_id', req.query.job).single();
+    const { data: resultRows } = await supabase.from('sync_results').select('*').eq('job_id', req.query.job);
+    const result = resultRows && resultRows.length > 0 ? resultRows[0] : null;
     if (result) {
       // Clean up after rendering
       await supabase.from('sync_results').delete().eq('job_id', req.query.job);
@@ -143,6 +144,11 @@ app.get('/r/:slug/:reportId', async (req, res) => {
         params: { DateFrom: result.date_from, DateTo: result.date_to },
         columns: config.columns, filters: config.filters || [], filterOpts: null
       });
+    }
+    // Check if job still exists — if not, data was already delivered, redirect to clean URL
+    const { data: jobRows } = await supabase.from('sync_jobs').select('id').eq('id', req.query.job);
+    if (!jobRows || jobRows.length === 0) {
+      return res.redirect('/r/' + req.params.slug + '/' + report.id);
     }
     // Result not ready yet — pass syncJobId for polling
     return res.render(config.template, {
@@ -201,12 +207,14 @@ app.post('/r/:slug/:reportId', async (req, res) => {
 
 // AJAX: poll for job completion status (does NOT delete — GET handler cleans up)
 app.get('/api/jobs/:jobId/result', async (req, res) => {
-  const { data: job } = await supabase.from('sync_jobs').select('*').eq('id', req.params.jobId).single();
+  const { data: jobRows } = await supabase.from('sync_jobs').select('*').eq('id', req.params.jobId);
+  const job = jobRows && jobRows.length > 0 ? jobRows[0] : null;
   if (!job) return res.json({ status: 'not_found' });
   if (job.status === 'failed') return res.json({ status: 'failed', error: job.error });
   if (job.status !== 'completed') return res.json({ status: job.status });
 
-  const { data: result } = await supabase.from('sync_results').select('*').eq('job_id', req.params.jobId).single();
+  const { data: resultRows } = await supabase.from('sync_results').select('*').eq('job_id', req.params.jobId);
+  const result = resultRows && resultRows.length > 0 ? resultRows[0] : null;
   if (!result) return res.json({ status: 'no_data' });
 
   res.json({ status: 'completed', data: result.data, report_id: result.report_id, columns: result.columns });
@@ -217,7 +225,8 @@ app.get('/api/jobs/:jobId/result', async (req, res) => {
 
 // Agent polls for pending jobs
 app.get('/api/agent/:apiKey/jobs', async (req, res) => {
-  const { data: restaurant } = await supabase.from('restaurants').select('*').eq('api_key', req.params.apiKey).single();
+  const { data: restRows } = await supabase.from('restaurants').select('*').eq('api_key', req.params.apiKey);
+  const restaurant = restRows && restRows.length > 0 ? restRows[0] : null;
   if (!restaurant) return res.status(401).json({ error: 'Invalid API key' });
 
   const { data: jobs } = await supabase.from('sync_jobs')
@@ -229,7 +238,8 @@ app.get('/api/agent/:apiKey/jobs', async (req, res) => {
 
 // Agent updates job status + pushes result
 app.post('/api/agent/:apiKey/push', async (req, res) => {
-  const { data: restaurant } = await supabase.from('restaurants').select('*').eq('api_key', req.params.apiKey).single();
+  const { data: restRows } = await supabase.from('restaurants').select('*').eq('api_key', req.params.apiKey);
+  const restaurant = restRows && restRows.length > 0 ? restRows[0] : null;
   if (!restaurant) return res.status(401).json({ error: 'Invalid API key' });
 
   const { job_id, data, error: errMsg, _more } = req.body;
@@ -268,14 +278,15 @@ app.post('/api/agent/:apiKey/push', async (req, res) => {
 
 // Agent: claim a job (set to running)
 app.post('/api/agent/:apiKey/claim', async (req, res) => {
-  const { data: restaurant } = await supabase.from('restaurants').select('*').eq('api_key', req.params.apiKey).single();
+  const { data: restRows } = await supabase.from('restaurants').select('*').eq('api_key', req.params.apiKey);
+  const restaurant = restRows && restRows.length > 0 ? restRows[0] : null;
   if (!restaurant) return res.status(401).json({ error: 'Invalid API key' });
 
   const { job_id } = req.body;
   await supabase.from('sync_jobs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', job_id);
 
-  const { data: job } = await supabase.from('sync_jobs').select('*').eq('id', job_id).single();
-  res.json(job);
+  const { data: jobRows } = await supabase.from('sync_jobs').select('*').eq('id', job_id);
+  res.json(jobRows && jobRows.length > 0 ? jobRows[0] : null);
 });
 
 // ============ ADMIN ROUTES ============
@@ -304,8 +315,9 @@ app.post('/admin/restaurants', async (req, res) => {
 });
 
 app.get('/admin/restaurants/:id/edit', async (req, res) => {
-  const { data: r, error } = await supabase.from('restaurants').select('*').eq('id', req.params.id).single();
-  if (error || !r) return res.redirect('/admin/restaurants?error=Not found');
+  const { data: rRows } = await supabase.from('restaurants').select('*').eq('id', req.params.id);
+  const r = rRows && rRows.length > 0 ? rRows[0] : null;
+  if (!r) return res.redirect('/admin/restaurants?error=Not found');
   res.render('admin-form', { title: 'R-Keeper Reports', r, isNew: false, error: null });
 });
 
