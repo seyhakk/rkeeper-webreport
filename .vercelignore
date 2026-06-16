@@ -1,4 +1,10 @@
 agent-gui
 agent/build
+agent/Agent.exe
 agent/node_modules
+agent/config.example.json
+agent/README.md
+agent/build.js
+agent/package.json
+agent/package-lock.json
 supabase/.temp
