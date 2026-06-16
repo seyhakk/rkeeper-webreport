@@ -262,41 +262,35 @@ app.get('/api/agent/:apiKey/jobs', async (req, res) => {
 
 // Agent updates job status + pushes result
 app.post('/api/agent/:apiKey/push', async (req, res) => {
-  const { data: restRows } = await supabase.from('restaurants').select('*').eq('api_key', req.params.apiKey);
-  const restaurant = restRows && restRows.length > 0 ? restRows[0] : null;
-  if (!restaurant) return res.status(401).json({ error: 'Invalid API key' });
+  try {
+    const { data: restRows } = await supabase.from('restaurants').select('*').eq('api_key', req.params.apiKey);
+    const restaurant = restRows && restRows.length > 0 ? restRows[0] : null;
+    if (!restaurant) return res.status(401).json({ error: 'Invalid API key' });
 
-  const { job_id, data, error: errMsg, _more } = req.body;
+    const { job_id, data, error: errMsg } = req.body;
 
-  if (errMsg) {
-    await supabase.from('sync_jobs').update({ status: 'failed', error: errMsg, completed_at: new Date().toISOString() }).eq('id', job_id);
-    return res.json({ status: 'failed' });
-  }
+    if (errMsg) {
+      await supabase.from('sync_jobs').update({ status: 'failed', error: errMsg, completed_at: new Date().toISOString() }).eq('id', job_id);
+      return res.json({ status: 'failed' });
+    }
 
-  // Chunked push: append to existing data or create new
-  let merged = data;
-  const { data: existingRows } = await supabase.from('sync_results').select('data').eq('job_id', job_id);
-  if (existingRows && existingRows.length > 0 && existingRows[0].data) {
-    merged = existingRows[0].data.concat(data);
-  }
+    // Mark job completed
+    const { error: updateErr } = await supabase.from('sync_jobs').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', job_id);
+    if (updateErr) console.error('update error:', updateErr);
 
-  if (_more) {
-    // Save accumulated data, keep job running
-    await supabase.from('sync_results').upsert({
+    // Delete any existing result for this job, then insert fresh
+    await supabase.from('sync_results').delete().eq('job_id', job_id);
+    const { error: insertErr } = await supabase.from('sync_results').insert({
       job_id, restaurant_id: restaurant.id, report_id: req.body.report_id,
       date_from: req.body.date_from, date_to: req.body.date_to,
-      data: merged, columns: req.body.columns || null
-    }, { onConflict: 'job_id' });
-    res.json({ status: 'partial', rows: merged.length });
-  } else {
-    // Final chunk: save and mark completed
-    await supabase.from('sync_jobs').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', job_id);
-    await supabase.from('sync_results').upsert({
-      job_id, restaurant_id: restaurant.id, report_id: req.body.report_id,
-      date_from: req.body.date_from, date_to: req.body.date_to,
-      data: merged, columns: req.body.columns || null
-    }, { onConflict: 'job_id' });
+      data: data, columns: req.body.columns || null
+    });
+    if (insertErr) console.error('insert error:', insertErr);
+
     res.json({ status: 'completed' });
+  } catch (e) {
+    console.error('push error:', e);
+    res.status(500).json({ error: e.message });
   }
 });
 
