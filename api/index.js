@@ -240,10 +240,10 @@ app.post('/api/agent/:apiKey/push', async (req, res) => {
   }
 
   // Chunked push: append to existing data or create new
-  const existing = await supabase.from('sync_results').select('data').eq('job_id', job_id).single();
   let merged = data;
-  if (existing.data && existing.data.length) {
-    merged = existing.data.concat(data);
+  const { data: existingRows } = await supabase.from('sync_results').select('data').eq('job_id', job_id);
+  if (existingRows && existingRows.length > 0 && existingRows[0].data) {
+    merged = existingRows[0].data.concat(data);
   }
 
   if (_more) {
